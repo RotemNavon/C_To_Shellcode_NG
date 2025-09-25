@@ -28,8 +28,9 @@ def patch_nop_to_jmp(buf):
     print(f"[+] Patched JMP at offset {idx}, relative offset {rel_offset:#x}")
     return patched
 
-CC = "x86_64-w64-mingw32-gcc-win32"
+CC = "x86_64-w64-mingw32-g++-win32"
 BIN_PAYLOAD_CFLAGS = args([
+    "-D_MM_MALLOC_H_INCLUDED",
     "-Os",
     "-fPIC",
     "-nostdlib",
@@ -45,10 +46,11 @@ if __name__ == "__main__":
     main_base = f"src/main"
     wrapper_base = f"src/wrapper"
     payload_path = f"bin/payload.bin"
+    file_ext = f".cpp"
 
     # Compile payload C code to object file
-    run_cmd(f"{CC} -c {main_base}.c -o {main_base}.o {BIN_PAYLOAD_CFLAGS}")
-    run_cmd(f"{CC} -c {wrapper_base}.c -o {wrapper_base}.o {BIN_PAYLOAD_CFLAGS}")
+    run_cmd(f"{CC} -c {main_base}{file_ext} -o {main_base}.o {BIN_PAYLOAD_CFLAGS}")
+    run_cmd(f"{CC} -c {wrapper_base}{file_ext} -o {wrapper_base}.o {BIN_PAYLOAD_CFLAGS}")
 
     # Produce flat binary with payload
     run_cmd(f"ld -T utils/linker.ld {main_base}.o {wrapper_base}.o -o {payload_path}")
