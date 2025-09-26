@@ -109,35 +109,33 @@ FUNC void* GetExportByName(void* moduleBase, const char* funcName)
 FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
 {
     if (!functions) return 1;
+
     void* kernel32Base = GetModuleBase(L"kernel32.dll");
     if (!kernel32Base) return 1;
 
     functions->GetProcAddress = (decltype(&GetProcAddress))GetExportByName(kernel32Base, "GetProcAddress");
     functions->LoadLibraryA   = (decltype(&LoadLibraryA))GetExportByName(kernel32Base, "LoadLibraryA");
-
     if (!functions->GetProcAddress || !functions->LoadLibraryA)
         return 1;
 
 #define X(name, dll) \
     { \
-        void* modBase = nullptr; \
-        if (MyStrCmp(dll, "kernel32.dll") == 0) { \
-            modBase = kernel32Base; \
-        } else { \
-            wchar_t wDll[64]; \
-            const char* src = dll; \
-            wchar_t* dst = wDll; \
-            while (*src && dst < wDll + 63) *dst++ = (wchar_t)(unsigned char)*src++; \
-            *dst = L'\0'; \
-            modBase = GetModuleBase(wDll); \
-            if (!modBase && functions->LoadLibraryA) \
-                modBase = functions->LoadLibraryA(dll); \
+        void* modBase = NULL; \
+        wchar_t wDll[64]; \
+        const char* src = dll; \
+        wchar_t* dst = wDll; \
+        while (*src && dst < wDll + 63) *dst++ = (wchar_t)(unsigned char)*src++; \
+        *dst = L'\0'; \
+        modBase = GetModuleBase(wDll); \
+        if (!modBase && functions->LoadLibraryA) { \
+            modBase = functions->LoadLibraryA(dll); \
         } \
         functions->name = modBase ? (decltype(&name))functions->GetProcAddress((HMODULE)modBase, #name) : nullptr; \
         if (!functions->name) return 1; \
     }
     WIN32_FUNC_ARSENAL
 #undef X
+
     return 0;
 }
 
