@@ -1,124 +1,119 @@
 # C_To_Shellcode_NG
 
-## 🚀 Overall Purpose
+## 🚀 Purpose
 
-**C_To_Shellcode_NG** is a modern, modular framework for building advanced Windows shellcode from C/C++ source code.  
-It enables security researchers, reverse engineers, and red teamers to write complex shellcode logic in high-level C/C++ (and even Python for tooling), compile it with familiar tools, and generate raw, position-independent shellcode binaries ready for offensive operations, testing, or research.
-
-This project streamlines the shellcode development workflow, enabling rapid prototyping, debugging, and deployment of custom payloads for Windows environments.
+**C_To_Shellcode_NG** is a modern framework for building advanced Windows shellcode from C/C++.  
+Write your payload logic in high-level code, compile it on Linux, and generate raw position-independent shellcode for red teaming, research, or testing.
 
 ---
 
 ## 📦 Features
 
-- **Write shellcode in C/C++:** Leverage the power and flexibility of modern languages.
-- **Flexible payload generation:** Output raw binaries, C arrays, or loader executables with your shellcode embedded.
-- **Cross-platform build workflow:** Develop on Linux and run on Windows.
-- **Dynamic API resolution:** The shellcode resolves Win32 APIs at runtime, supporting direct and forwarded exports.
-- **Template-based loader:** Quickly generate and compile loader executables for testing your payloads.
-- **Modular design:** Easily extend with new source modules, payload types, and utilities.
+- **C/C++ shellcode:** Write complex payloads in familiar languages.
+- **Flexible output:** Raw binaries, C arrays, or ready-to-run loaders.
+- **Cross-platform build:** Develop on Linux, run on Windows.
+- **Dynamic WinAPI resolution:** Handles direct and forwarded exports at runtime.
+- **Modular & extensible:** Add sources, payload types, or utilities easily.
 
 ---
 
-## 🛠️ How to Use
+## 🛠️ Usage
 
-### 1. **Environment Setup**
+### 1. **Environment**
 
-- **Required OS:** Linux (recommended for building; shellcode runs on Windows)
-- **Required Packages:**
-  - **MinGW-w64 cross-compiler:** `x86_64-w64-mingw32-g++`
-  - `ld` (GNU linker)
-  - Python 3 (for the build tooling)
-- **Optional:** PE inspection tools like PE-bear, dumpbin, etc.
+- **Build OS:** Linux
+- **Required:** Python 3, MinGW-w64 cross-compiler (`x86_64-w64-mingw32-g++`)
+- **Install:**  
+  ```bash
+  sudo apt-get update
+  sudo apt-get install python3 mingw-w64
+  ```
 
-#### **Install MinGW-w64 (Debian/Ubuntu):**
-```bash
-sudo apt-get update
-sudo apt-get install python3 mingw-w64
-```
-
-### 2. **Project Layout**
+### 2. **Project Structure**
 
 ```
 C_To_Shellcode_NG/
-├── src/            # C++ source files for your shellcode logic
-├── utils/          # Templates (e.g., loaderTemplate.cpp), linker scripts, helper scripts
-├── bin/            # Output binaries, payloads, temp files (auto-generated, ignored in git)
-├── c-to-shellcode.py  # Main build script
-├── README.md
-├── .gitignore
+├── src/            # C++ shellcode sources
+├── utils/          # Templates, linker scripts
+├── bin/            # Output files (gitignored)
+├── c-to-shellcode.py
 ...
 ```
 
-### 3. **Building Shellcode**
+### 3. **Build**
 
-- Write your shellcode logic in `src/main.cpp` and supporting modules.
-- **For every function you want included in the shellcode, mark it with the `FUNC` macro** (this places it in a special `.func` section).
-- Run the build script:
+- Mark shellcode functions with the `FUNC` macro (puts them in `.func`).
+- Run:
   ```bash
   python3 c-to-shellcode.py
   ```
-- The script will:
-  - Compile your sources to object files (using MinGW-w64 g++)
-  - Link them into a raw shellcode binary (`bin/payload.bin`) using a **custom linker script** which merges `.text`, `.func`, and `.data` into a single position-independent code (PIC) shellcode blob.
-  - Convert the binary to a C array and embed into a loader template
-  - Compile your loader into a Windows executable (`bin/loader.exe`)
-  - Clean up temporary files
+- The script:
+  - Compiles sources (MinGW-w64).
+  - Links them into a raw shellcode blob (merges `.text`, `.func`, `.data`).
+  - Converts the binary to a C array and embeds in the loader template.
+  - Compiles the loader (`bin/loader.exe`).
+  - Cleans up temp files.
 
-### 4. **Testing Your Shellcode**
+### 4. **Test**
 
-- Use `bin/loader.exe` on a Windows machine (or VM) to test your shellcode.
-- The loader template marks the shellcode memory as executable and runs it in-place.
+- Run `bin/loader.exe` on Windows/VM to execute your shellcode (loader marks memory executable and calls payload).
 
 ---
 
 ## 🧩 How It Works
 
-This project is **based on [Print3M/c-to-shellcode](https://github.com/Print3M/c-to-shellcode)**, extending and modernizing its approach for contemporary use.
+Based on [Print3M/c-to-shellcode](https://github.com/Print3M/c-to-shellcode) with modern extensions.
 
-**The build process works as follows:**
-1. **Mark functions for shellcode:** Use the `FUNC` macro to place all intended shellcode functions in the `.func` section.
-2. **Compile sources:** The Python build script compiles all listed source files using MinGW-w64 for Windows x64.
-3. **Custom linker script:** The linker script (`utils/linker.ld`) is used to merge the `.text`, `.func`, and `.data` sections into a single flat binary, ensuring all code and data are together and position-independent.
-4. **Payload extraction:** The resulting binary is converted into a C array and embedded in a loader template.
-5. **Loader compilation:** The loader is compiled into a Windows executable that allocates executable memory and runs your shellcode.
-
-**Why this matters:**  
-This method allows you to write shellcode in high-level C/C++, organize code modularly, and reliably produce position-independent shellcode for modern Windows environments.
+**Build summary:**
+- Functions for shellcode go in `.func` (via `FUNC` macro).
+- Python build script compiles and links to a flat PIC binary.
+- Loader template executes the shellcode on Windows.
 
 ---
 
-## 📚 Additional Information
+## 🛠️ Inline Hook Patching (Sandwich Method)
 
-- **Modularity:** Add new source files in `src/` and update the `base_names` list in `c-to-shellcode.py` to include them in your build.
-- **Custom payloads:** You can easily modify the loader template or payload generation process for other output formats.
-- **Extensibility:** Want to support other architectures, compilers, or shellcode styles? Fork and extend!
-- **Security Note:** Generated shellcode is intended for research, red teaming, or defensive testing. **Do not use for unauthorized access or harm.**
+For inline hooks (`overwritten bytes - shellcode - jmp back`):
+
+- The shellcode entry (e.g. `StartWrapper`) should use `__attribute__((naked))`.
+  - **Note:** GCC may not emit 5 NOPs automatically.  
+    **Manually add 5 NOPs** at the end of your function using:
+  - In a naked function, **do your own stack prep**: push/pop registers, adjust RSP, etc., since the compiler does not generate prologue/epilogue.
+    - Recommended: Push all registers except rsp and related, then `sub rsp, 0x32` for shadow space, and reverse at the end.
+- The build script's `patch_nop_to_jmp` function:
+  - Locates the NOP+UD2 marker at the end of your shellcode.
+  - Replaces it with a relative JMP to the shellcode end, so you can manually append a jump back to the original code.
+
+---
+
+## 📚 Notes
+
+- Add new modules in `src/` and update `base_names` in the Python script.
+- For custom payloads, edit the loader template or Python build logic.
+- **Security:** For research or defense only. Do not use for unauthorized access.
 
 ---
 
 ## 💬 Troubleshooting
 
-- **Payload too large?** Try reducing the number of resolved APIs, or optimizing your shellcode logic.
-- **Linux build errors?** Ensure MinGW-w64 and Python 3 are installed and available in your PATH.
+- **Large payloads:** Optimize logic and minimize WinAPI usage.
+- **Build errors:** Check MinGW-w64 and Python 3 installation.
 
 ---
 
 ## 📝 License
 
-This project is provided for educational and research purposes.  
-See the LICENSE file for details.
+See LICENSE for details.
 
 ---
 
 ## 🤝 Contributing
 
-Pull requests, issue reports, and suggestions are welcome!  
-Help make shellcode development more accessible for everyone.
+Contributions and suggestions welcome!
 
 ---
 
-## 📂 Authors
+## 📂 Author
 
 - [Rotem Navon](https://github.com/RotemNavon)
 
@@ -127,17 +122,13 @@ Help make shellcode development more accessible for everyone.
 ## 🏁 Quick Start
 
 ```bash
-# Install dependencies
 sudo apt-get install python3 mingw-w64
-
-# Build shellcode and loader
 python3 c-to-shellcode.py
-
-# Transfer bin/loader.exe to a Windows machine and run it!
+# Transfer bin/loader.exe to Windows and run!
 ```
 
 ---
 
 ## 🙏 Acknowledgements
 
-Based on and inspired by [Print3M/c-to-shellcode](https://github.com/Print3M/c-to-shellcode).
+Inspired by [Print3M/c-to-shellcode](https://github.com/Print3M/c-to-shellcode).
