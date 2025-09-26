@@ -150,17 +150,16 @@ FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-//__attribute__((naked)) // uncomment this if you want an inline hooking ready shellcode 
+// __attribute__((naked)) // uncomment this if you want an inline hooking ready shellcode 
 void StartWrapper()
 {
-    // uncomment this if you want an inline hooking ready shellcode 
     // Recommended: For inline hook shellcode, push all registers except rsp and such, and sub rsp by at least 0x32 for shadow space, pop/add at the end.
-    // Example:
+    // uncomment this if you want an inline hooking ready shellcode 
     // __asm__ __volatile__(
-    //   "push rax; push rcx; push rdx; push rbx; push rsi; push rdi; push rbp; push r8; push r9; push r10; push r11; push r12; push r13; push r14; push r15;"
-    //   "sub rsp, 0x32;"
+    //   "push %rax; push %rcx; push %rdx; push %rbx; push %rsi; push %rdi; push %rbp; push %r8; push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15;"
+    //   "sub $0x32, %rsp;"
     // );
-    
+
     ALIGN_STACK();
 
     // save the exit label to a register for execution continuation after exception
@@ -187,8 +186,8 @@ shellcode_exit:
 
     // uncomment this if you want an inline hooking ready shellcode 
     // __asm__ __volatile__(
-    //   "add rsp, 0x32;"
-    //   "pop r15; pop r14; pop r13; pop r12; pop r11; pop r10; pop r9; pop r8; pop rbp; pop rdi; pop rsi; pop rbx; pop rdx; pop rcx; pop rax;"
+    //   "add $0x32, %rsp;"
+    //   "pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8; pop %rbp; pop %rdi; pop %rsi; pop %rbx; pop %rdx; pop %rcx; pop %rax;"
     // );
     // __asm__ __volatile__("nop; nop; nop; nop; nop;");
 }

@@ -77,7 +77,7 @@ For inline hooks (`overwritten bytes - shellcode - jmp back`):
 
 - The shellcode entry (e.g. `StartWrapper`) should use `__attribute__((naked))`.
   - **Note:** GCC may not emit 5 NOPs automatically.  
-    **Manually add 5 NOPs** at the end of your function using:
+    **Manually add 5 NOPs** at the end of your function.
   - In a naked function, **do your own stack prep**: push/pop registers, adjust RSP, etc., since the compiler does not generate prologue/epilogue.
     - Recommended: Push all registers except rsp and related, then `sub rsp, 0x32` for shadow space, and reverse at the end.
 - The build script's `patch_nop_to_jmp` function:
