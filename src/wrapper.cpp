@@ -154,22 +154,25 @@ void StartWrapper()
 {
     ALIGN_STACK();
 
+    // save the exit label to a register for execution continuation after exception
     void* exit_label = &&shellcode_exit;
     __asm__ __volatile__("mov %0, %%r12" : : "r"(exit_label));
 
+    // resolve all api functions
     DYNAMIC_FUNCTIONS functions = {};
     if (ResolveDynamicFunctions(&functions) != 0)
         return;
 
+    // add the vectored exception handler
     PVOID vehHandle = functions.AddVectoredExceptionHandler ?
         functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : NULL;
     if (!vehHandle) return;
 
     Start(&functions);
 
+shellcode_exit:
+
+    // remove the handler
     if (vehHandle && functions.RemoveVectoredExceptionHandler)
         functions.RemoveVectoredExceptionHandler(vehHandle);
-
-shellcode_exit:
-    return;
 }
