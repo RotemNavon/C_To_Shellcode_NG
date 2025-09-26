@@ -1,42 +1,6 @@
 #include "wrapper.h"
+#include "strUtils.h"
 
-// ---- Helper string and wstring comparison ----
-FUNC int MyStrCmp(const char* s1, const char* s2)
-{
-    if (!s1 || !s2) return (s1 == s2) ? 0 : (s1 ? 1 : -1);
-    while (*s1 && *s2) {
-        if ((unsigned char)*s1 != (unsigned char)*s2)
-            return (int)(unsigned char)*s1 - (int)(unsigned char)*s2;
-        s1++; s2++;
-    }
-    return (int)(unsigned char)*s1 - (int)(unsigned char)*s2;
-}
-
-FUNC int MyWcsIcmp(const wchar_t* s1, const wchar_t* s2)
-{
-    if (!s1 || !s2) return (s1 == s2) ? 0 : (s1 ? 1 : -1);
-    while (*s1 && *s2) {
-        wchar_t c1 = *s1, c2 = *s2;
-        if (c1 >= L'A' && c1 <= L'Z') c1 += 0x20;
-        if (c2 >= L'A' && c2 <= L'Z') c2 += 0x20;
-        if (c1 != c2) return (int)c1 - (int)c2;
-        s1++; s2++;
-    }
-    return (int)(*s1 - *s2);
-}
-
-// ---- Helper: Get filename from wide path ----
-FUNC const wchar_t* GetFilenameW(const wchar_t* path)
-{
-    if (!path) return path;
-    const wchar_t* last = path;
-    for (const wchar_t* p = path; *p; ++p)
-        if (*p == L'\\' || *p == L'/')
-            last = p + 1;
-    return last;
-}
-
-// ---- Generic GetModuleBase (find loaded DLL by name, case-insensitive, returns NULL if not found) ----
 FUNC void* GetModuleBase(const wchar_t* dllName)
 {
     if (!dllName) return NULL;
@@ -67,70 +31,106 @@ FUNC void* GetModuleBase(const wchar_t* dllName)
     return NULL;
 }
 
-// ---- Manual Export Resolver ----
-FUNC void* GetExportByName(void* moduleBase, const char* funcName)
+FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllName, size_t dllNameCapacity, char* outExportName, size_t exportNameCapacity) {
+    if (!forwarderString) return false;
+    const char* period = MyStrchr(forwarderString, '.');
+    if (!period) return false;
+    size_t dllPartLen = (size_t)(period - forwarderString);
+    if (dllPartLen >= dllNameCapacity) dllPartLen = dllNameCapacity - 1;
+    MyStrncpy(outDllName, forwarderString, dllPartLen);
+    outDllName[dllPartLen] = '\0';
+
+    size_t actualDllLen = MyStrlen(outDllName);
+    if (actualDllLen < 4 || MyStricmp(outDllName + actualDllLen - 4, ".dll") != 0) {
+        MyStrncpy(outDllName + actualDllLen, ".dll", dllNameCapacity - actualDllLen - 1);
+    }
+    MyStrncpy(outExportName, period + 1, exportNameCapacity - 1);
+    outExportName[exportNameCapacity - 1] = '\0';
+    return true;
+}
+
+FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int forwarderDepth = 0, void* (*LoadLibraryA)(const char*) = nullptr)
 {
-    if (!moduleBase || !funcName) return NULL;
+    if (!moduleBase || !exportName || forwarderDepth > MAX_FORWARDER_RECURSION_DEPTH) return NULL;
 
-    BYTE* base = (BYTE*)moduleBase;
+    BYTE* moduleBytes = (BYTE*)moduleBase;
+    IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)moduleBytes;
+    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
+    IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)(moduleBytes + dosHeader->e_lfanew);
+    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return NULL;
 
-    IMAGE_DOS_HEADER* dos = (IMAGE_DOS_HEADER*)base;
-    if (dos->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
-
-    IMAGE_NT_HEADERS* nt = (IMAGE_NT_HEADERS*)(base + dos->e_lfanew);
-    if (nt->Signature != IMAGE_NT_SIGNATURE) return NULL;
-
-    if (nt->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
+    if (ntHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
         return NULL;
 
-    DWORD exportDirRVA = nt->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-    if (!exportDirRVA) return NULL;
+    DWORD exportDirectoryRVA = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (!exportDirectoryRVA) return NULL;
 
-    IMAGE_EXPORT_DIRECTORY* exp = (IMAGE_EXPORT_DIRECTORY*)(base + exportDirRVA);
+    IMAGE_EXPORT_DIRECTORY* exportDirectory = (IMAGE_EXPORT_DIRECTORY*)(moduleBytes + exportDirectoryRVA);
+    DWORD* exportNameRVAs = (DWORD*)(moduleBytes + exportDirectory->AddressOfNames);
+    WORD* exportOrdinals = (WORD*)(moduleBytes + exportDirectory->AddressOfNameOrdinals);
+    DWORD* exportFunctionRVAs = (DWORD*)(moduleBytes + exportDirectory->AddressOfFunctions);
 
-    DWORD* names = (DWORD*)(base + exp->AddressOfNames);
-    WORD* ordinals = (WORD*)(base + exp->AddressOfNameOrdinals);
-    DWORD* functions = (DWORD*)(base + exp->AddressOfFunctions);
-
-    for (DWORD i = 0; i < exp->NumberOfNames; ++i)
+    for (DWORD i = 0; i < exportDirectory->NumberOfNames; ++i)
     {
-        const char* currName = (const char*)(base + names[i]);
-        if (MyStrCmp(currName, funcName) == 0)
+        const char* currentExportName = (const char*)(moduleBytes + exportNameRVAs[i]);
+        if (MyStrCmp(currentExportName, exportName) == 0)
         {
-            WORD ordinal = ordinals[i];
-            DWORD funcRVA = functions[ordinal];
-            return (void*)(base + funcRVA);
+            WORD ordinal = exportOrdinals[i];
+            DWORD exportAddressRVA = exportFunctionRVAs[ordinal];
+
+            DWORD exportDirectoryStart = exportDirectoryRVA;
+            DWORD exportDirectoryEnd = exportDirectoryStart + ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+            if (exportAddressRVA >= exportDirectoryStart && exportAddressRVA < exportDirectoryEnd)
+            {
+                const char* forwarderString = (const char*)(moduleBytes + exportAddressRVA);
+                char forwarderDll[64], forwarderExport[64];
+                if (!ParseExportForwarderString(forwarderString, forwarderDll, sizeof(forwarderDll), forwarderExport, sizeof(forwarderExport)))
+                    return NULL;
+
+                wchar_t forwarderDllW[64];
+                const char* src = forwarderDll;
+                wchar_t* dst = forwarderDllW;
+                while (*src && dst < forwarderDllW + 63) *dst++ = (wchar_t)(unsigned char)*src++;
+                *dst = L'\0';
+
+                void* forwarderModuleBase = GetModuleBase(forwarderDllW);
+                if (!forwarderModuleBase && LoadLibraryA)
+                    forwarderModuleBase = LoadLibraryA(forwarderDll);
+                if (!forwarderModuleBase)
+                    return NULL;
+
+                return ResolveExportByName(forwarderModuleBase, forwarderExport, forwarderDepth + 1, LoadLibraryA);
+            }
+            return (void*)(moduleBytes + exportAddressRVA);
         }
     }
     return NULL;
 }
 
-// ---- Dynamic Resolver using X-macro, decltype and only name/dll! ----
 FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
 {
     if (!functions) return 1;
 
-    void* kernel32Base = GetModuleBase(L"kernel32.dll");
+    wchar_t kernel32W[] = L"kernel32.dll";
+    void* kernel32Base = GetModuleBase(kernel32W);
     if (!kernel32Base) return 1;
 
-    functions->GetProcAddress = (decltype(&GetProcAddress))GetExportByName(kernel32Base, "GetProcAddress");
-    functions->LoadLibraryA   = (decltype(&LoadLibraryA))GetExportByName(kernel32Base, "LoadLibraryA");
-    if (!functions->GetProcAddress || !functions->LoadLibraryA)
+    functions->LoadLibraryA = (decltype(&LoadLibraryA))ResolveExportByName(kernel32Base, "LoadLibraryA");
+    if (!functions->LoadLibraryA)
         return 1;
 
 #define X(name, dll) \
     { \
-        void* modBase = NULL; \
         wchar_t wDll[64]; \
         const char* src = dll; \
         wchar_t* dst = wDll; \
         while (*src && dst < wDll + 63) *dst++ = (wchar_t)(unsigned char)*src++; \
         *dst = L'\0'; \
-        modBase = GetModuleBase(wDll); \
-        if (!modBase && functions->LoadLibraryA) { \
+        void* modBase = GetModuleBase(wDll); \
+        if (!modBase && functions->LoadLibraryA) \
             modBase = functions->LoadLibraryA(dll); \
-        } \
-        functions->name = modBase ? (decltype(&name))functions->GetProcAddress((HMODULE)modBase, #name) : nullptr; \
+        auto loader = (void* (*)(const char*))functions->LoadLibraryA; \
+        functions->name = modBase ? (decltype(&name))ResolveExportByName(modBase, #name, 0, loader) : nullptr; \
         if (!functions->name) return 1; \
     }
     WIN32_FUNC_ARSENAL
@@ -139,9 +139,9 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
     return 0;
 }
 
-// --- VEH: Jump to R12 (end-of-main label) on exception ---
 FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
 {
+    __debugbreak();
     CONTEXT* ctx = pExceptionInfo ? pExceptionInfo->ContextRecord : nullptr;
     if (ctx && ctx->R12 && ctx->Rip != ctx->R12) {
         ctx->Rip = ctx->R12;
@@ -150,7 +150,6 @@ FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-// --- Entry point wrapper ---
 void StartWrapper()
 {
     ALIGN_STACK();
@@ -162,7 +161,8 @@ void StartWrapper()
     if (ResolveDynamicFunctions(&functions) != 0)
         return;
 
-    PVOID vehHandle = functions.AddVectoredExceptionHandler ? functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : NULL;
+    PVOID vehHandle = functions.AddVectoredExceptionHandler ?
+        functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : NULL;
     if (!vehHandle) return;
 
     Start(&functions);
