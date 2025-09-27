@@ -68,11 +68,11 @@ FUNC const wchar_t* GetFilenameW(const wchar_t* path)
 
 FUNC char* MyStrchr(const char* str, int c)
 {
-    if (!str) return NULL;
+    if (!str) return nullptr;
     while (*str) {
         if (*str == (char)c)
             return (char*)str;
         ++str;
     }
-    return (c == 0) ? (char*)str : NULL;
+    return (c == 0) ? (char*)str : nullptr;
 }

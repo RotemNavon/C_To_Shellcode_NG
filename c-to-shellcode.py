@@ -12,6 +12,7 @@ BIN_PAYLOAD_CFLAGS = " ".join([
     "-D_MM_MALLOC_H_INCLUDED",
     "-Os",
     "-fPIC",
+    "-Wno-c++23-extensions", # Suppress C++23 extension warnings
     "-nostdlib",
     "-nostartfiles",
     "-ffreestanding",

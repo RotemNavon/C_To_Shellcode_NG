@@ -3,17 +3,17 @@
 
 FUNC void* GetModuleBase(const wchar_t* dllName)
 {
-    if (!dllName) return NULL;
+    if (!dllName) return nullptr;
 
-    PPEB peb = NULL;
+    PPEB peb = nullptr;
     __asm__ __volatile__("movq %%gs:0x60, %0" : "=r" (peb));
-    if (!peb) return NULL;
+    if (!peb) return nullptr;
 
     PPEB_LDR_DATA ldr = peb->Ldr;
-    if (!ldr) return NULL;
+    if (!ldr) return nullptr;
 
     PLIST_ENTRY head = &ldr->InMemoryOrderModuleList;
-    if (!head) return NULL;
+    if (!head) return nullptr;
 
     PLIST_ENTRY current = head->Flink;
     int sanity = 0;
@@ -28,7 +28,7 @@ FUNC void* GetModuleBase(const wchar_t* dllName)
         }
         current = current->Flink;
     }
-    return NULL;
+    return nullptr;
 }
 
 FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllName, size_t dllNameCapacity, char* outExportName, size_t exportNameCapacity) {
@@ -51,19 +51,19 @@ FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllNa
 
 FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int forwarderDepth = 0, void* (*LoadLibraryA)(const char*) = nullptr)
 {
-    if (!moduleBase || !exportName || forwarderDepth > MAX_FORWARDER_RECURSION_DEPTH) return NULL;
+    if (!moduleBase || !exportName || forwarderDepth > MAX_FORWARDER_RECURSION_DEPTH) return nullptr;
 
     BYTE* moduleBytes = (BYTE*)moduleBase;
     IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)moduleBytes;
-    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return NULL;
+    if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
     IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)(moduleBytes + dosHeader->e_lfanew);
-    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return NULL;
+    if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return nullptr;
 
     if (ntHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
-        return NULL;
+        return nullptr;
 
     DWORD exportDirectoryRVA = ntHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-    if (!exportDirectoryRVA) return NULL;
+    if (!exportDirectoryRVA) return nullptr;
 
     IMAGE_EXPORT_DIRECTORY* exportDirectory = (IMAGE_EXPORT_DIRECTORY*)(moduleBytes + exportDirectoryRVA);
     DWORD* exportNameRVAs = (DWORD*)(moduleBytes + exportDirectory->AddressOfNames);
@@ -85,7 +85,7 @@ FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int for
                 const char* forwarderString = (const char*)(moduleBytes + exportAddressRVA);
                 char forwarderDll[64], forwarderExport[64];
                 if (!ParseExportForwarderString(forwarderString, forwarderDll, sizeof(forwarderDll), forwarderExport, sizeof(forwarderExport)))
-                    return NULL;
+                    return nullptr;
 
                 wchar_t forwarderDllW[64];
                 const char* src = forwarderDll;
@@ -97,20 +97,20 @@ FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int for
                 if (!forwarderModuleBase && LoadLibraryA)
                     forwarderModuleBase = LoadLibraryA(forwarderDll);
                 if (!forwarderModuleBase)
-                    return NULL;
+                    return nullptr;
 
                 return ResolveExportByName(forwarderModuleBase, forwarderExport, forwarderDepth + 1, LoadLibraryA);
             }
             return (void*)(moduleBytes + exportAddressRVA);
         }
     }
-    return NULL;
+    return nullptr;
 }
 
 FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
 {
     if (!functions) return 1;
-    
+
     wchar_t kernel32W[] = L"kernel32.dll";
     void* kernel32Base = GetModuleBase(kernel32W);
     if (!kernel32Base) return 1;
@@ -139,21 +139,34 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
     return 0;
 }
 
+FUNC void RemoveVEHHandler()
+{
+    if (g_veh_handle && g_functions.RemoveVectoredExceptionHandler) {
+        g_functions.RemoveVectoredExceptionHandler(g_veh_handle);
+        g_veh_handle = nullptr;
+    }
+}
+
 FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
 {
     __debugbreak();
     CONTEXT* ctx = pExceptionInfo ? pExceptionInfo->ContextRecord : nullptr;
-    if (ctx && ctx->R12 && ctx->Rip != ctx->R12) {
-        ctx->Rip = ctx->R12;
+    if (ctx && g_exit_address && ctx->Rip != (DWORD64)g_exit_address) {
+        // Remove the VEH handler to prevent re-entry
+        RemoveVEHHandler();
+        
+        // Jump to clean exit point
+        ctx->Rip = (DWORD64)g_exit_address;
         return EXCEPTION_CONTINUE_EXECUTION;
     }
     return EXCEPTION_CONTINUE_SEARCH;
 }
 
-// __attribute__((naked)) // uncomment this if you want an inline hooking ready shellcode 
-void StartWrapper()
+// NAKED // uncomment this if you want an inline hooking ready shellcode
+NO_OPTIMIZE void StartWrapper() // disable optimizations to insure correct exit label address capture
 {
     // Recommended: For inline hook shellcode, push all registers except rsp and such, and sub rsp by at least 0x32 for shadow space, pop/add at the end.
+    
     // uncomment this if you want an inline hooking ready shellcode 
     // __asm__ __volatile__(
     //   "push %rax; push %rcx; push %rdx; push %rbx; push %rsi; push %rdi; push %rbp; push %r8; push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15;"
@@ -162,26 +175,22 @@ void StartWrapper()
 
     ALIGN_STACK();
 
-    // save the exit label to a register for execution continuation after exception
-    void* exit_label = &&shellcode_exit;
-    __asm__ __volatile__("mov %0, %%r12" : : "r"(exit_label));
+    g_exit_address = &&shellcode_exit;
 
     // resolve all api functions
     if (ResolveDynamicFunctions(&g_functions) != 0)
         return;
 
     // add the vectored exception handler
-    PVOID vehHandle = g_functions.AddVectoredExceptionHandler ?
-        g_functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : NULL;
-    if (!vehHandle) return;
+    g_veh_handle = g_functions.AddVectoredExceptionHandler ?
+        g_functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : nullptr;
+    if (!g_veh_handle) return;
 
     Start();
 
-shellcode_exit:
+    RemoveVEHHandler();
 
-    // remove the handler
-    if (vehHandle && g_functions.RemoveVectoredExceptionHandler)
-        g_functions.RemoveVectoredExceptionHandler(vehHandle);
+shellcode_exit:
 
     // uncomment this if you want an inline hooking ready shellcode 
     // __asm__ __volatile__(

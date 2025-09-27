@@ -89,13 +89,14 @@ Below is the layout of the final shellcode binary:
 +-------------------------------+
 |    Shellcode Functions (.func)|  (All other functions, helpers, API resolvers - marked with FUNC)
 +-------------------------------+
-|    Strings and Values         |  (constants, literal strings, arrays, etc.)
+|    Strings, Values, Globals   |  (constants, literal strings, arrays, GLOBAL_VAR globals)
+|        (.data + .bss)         | 
 +-------------------------------+
 ```
 
 - **.text**: Only the shellcode entry point (`StartWrapper`).
-- **.func**: All other shellcode functions (helpers, logic, API resolvers, etc.) marked with the `FUNC` macro.
-- **strings/values**: Any referenced constants, arrays, and strings needed by your shellcode.
+- **.func**: All other shellcode functions.
+- **.data + .bss**: Any referenced constants, arrays, strings, and all global variables.
 
 > The linker script merges these into a single contiguous block for position-independent execution.
 
@@ -106,14 +107,14 @@ Below is the layout of the final shellcode binary:
 Globals are fully supported in shellcode.  
 There are two cases:
 
-**1. Single-source global**  
+**1. Single-source-file global**  
 Declare as `GLOBAL_VAR` directly in the `.cpp` file:
 ```cpp
 // main.cpp
 GLOBAL_VAR int my_counter = 0;
 ```
 
-**2. Cross-source global**  
+**2. Multi-source-files global**  
 Declare as `GLOBAL_VAR` in a shared header (`.h`):
 ```cpp
 // wrapper.h
