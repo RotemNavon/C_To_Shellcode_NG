@@ -131,6 +131,13 @@ Always initialize globals before use. In flat binaries, uninitialized globals ma
 
 ---
 
+## 🛠️ Header Usage
+
+Any header file can be imported in your shellcode source files, **but only for using macros, structs, enums, and type definitions**.  
+**Do not use or import functions from headers as it wont compile**
+
+---
+
 ## 🛠️ Inline Hook Patching (Sandwich Method)
 
 For inline hooks (`overwritten bytes - shellcode - jmp back`):
