@@ -22,7 +22,7 @@
     X(LoadLibraryA,                     "kernel32.dll") \
     X(AddVectoredExceptionHandler,      "kernel32.dll") \
     X(RemoveVectoredExceptionHandler,   "kernel32.dll") \
-    X(ShellExecuteA,                    "Shell32.dll")  \
+    X(ShellExecuteA,                    "shell32.dll")  \
     X(MessageBoxA,                      "user32.dll")   \
     X(sprintf,                          "msvcrt.dll")
 
@@ -33,3 +33,7 @@ struct DYNAMIC_FUNCTIONS
     WIN32_FUNC_ARSENAL
 #undef X
 };
+
+#define GLOBAL_VAR inline
+// Global functions structure instance - defined here to avoid extern linkage issues
+GLOBAL_VAR DYNAMIC_FUNCTIONS g_functions = {};

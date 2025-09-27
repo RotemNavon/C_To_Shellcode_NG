@@ -110,7 +110,7 @@ FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int for
 FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
 {
     if (!functions) return 1;
-
+    
     wchar_t kernel32W[] = L"kernel32.dll";
     void* kernel32Base = GetModuleBase(kernel32W);
     if (!kernel32Base) return 1;
@@ -167,22 +167,21 @@ void StartWrapper()
     __asm__ __volatile__("mov %0, %%r12" : : "r"(exit_label));
 
     // resolve all api functions
-    DYNAMIC_FUNCTIONS functions = {};
-    if (ResolveDynamicFunctions(&functions) != 0)
+    if (ResolveDynamicFunctions(&g_functions) != 0)
         return;
 
     // add the vectored exception handler
-    PVOID vehHandle = functions.AddVectoredExceptionHandler ?
-        functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : NULL;
+    PVOID vehHandle = g_functions.AddVectoredExceptionHandler ?
+        g_functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : NULL;
     if (!vehHandle) return;
 
-    Start(&functions);
+    Start();
 
 shellcode_exit:
 
     // remove the handler
-    if (vehHandle && functions.RemoveVectoredExceptionHandler)
-        functions.RemoveVectoredExceptionHandler(vehHandle);
+    if (vehHandle && g_functions.RemoveVectoredExceptionHandler)
+        g_functions.RemoveVectoredExceptionHandler(vehHandle);
 
     // uncomment this if you want an inline hooking ready shellcode 
     // __asm__ __volatile__(

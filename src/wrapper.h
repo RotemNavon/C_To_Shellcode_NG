@@ -9,4 +9,4 @@ FUNC void* GetExportByName(void* moduleBase, const char*Name);
 FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions);
 FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo);
 void StartWrapper();
-FUNC void Start(DYNAMIC_FUNCTIONS* functions);
+FUNC void Start();

@@ -103,10 +103,30 @@ Below is the layout of the final shellcode binary:
 
 ## 🗃️ Using Global Variables
 
-It is possible to use global variables in your shellcode, including both initialized and uninitialized globals.  
-**However, it's important to always initialize globals before their first use!**  
-When building shellcode as a flat binary, there is no operating system loader to zero out the `.bss` section or guarantee initial values.  
-Uninitialized globals may contain unpredictable data unless you set their value at runtime.
+Globals are fully supported in shellcode.  
+There are two cases:
+
+**1. Single-source global**  
+Declare as `GLOBAL_VAR` directly in the `.cpp` file:
+```cpp
+// main.cpp
+GLOBAL_VAR int my_counter = 0;
+```
+
+**2. Cross-source global**  
+Declare as `GLOBAL_VAR` in a shared header (`.h`):
+```cpp
+// wrapper.h
+GLOBAL_VAR DYNAMIC_FUNCTIONS g_functions = {};
+```
+Access from any file by including the header:
+```cpp
+// main.cpp
+#include "wrapper.h"
+// Use: g_functions.ShellExecuteA(...)
+```
+
+Always initialize globals before use. In flat binaries, uninitialized globals may contain garbage.
 
 ---
 
