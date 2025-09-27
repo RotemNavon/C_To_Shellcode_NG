@@ -7,13 +7,23 @@ Write your payload logic in high-level code, compile it on Linux, and generate r
 
 ---
 
+## 🏁 Quick Start
+
+```bash
+sudo apt-get install python3 mingw-w64
+python3 c-to-shellcode.py
+# Transfer bin/loader.exe to Windows and run!
+```
+
+---
+
 ## 📦 Features
 
-- **C/C++ shellcode:** Write complex payloads in familiar languages.
-- **Flexible output:** Raw binaries, C arrays, or ready-to-run loaders.
-- **Cross-platform build:** Develop on Linux, run on Windows.
-- **Dynamic WinAPI resolution:** Handles direct and forwarded exports at runtime.
-- **Modular & extensible:** Add sources, payload types, or utilities easily.
+- **Write shellcode in C/C++** — develop complex payloads in a familiar language.
+- **Flexible output** — produce raw binaries, C arrays, or ready-to-run loader executables.
+- **Cross-platform build** — compile on Linux, execute on Windows.
+- **Dynamic WinAPI resolution** — handles direct and forwarded exports at runtime.
+- **Modular & extensible** — add source files, payload types, or utilities easily.
 
 ---
 
@@ -42,32 +52,52 @@ C_To_Shellcode_NG/
 
 ### 3. **Build**
 
-- Mark shellcode functions with the `FUNC` macro (puts them in `.func`).
 - Run:
   ```bash
   python3 c-to-shellcode.py
   ```
-- The script:
-  - Compiles sources (MinGW-w64).
-  - Links them into a raw shellcode blob (merges `.text`, `.func`, `.data`).
-  - Converts the binary to a C array and embeds in the loader template.
-  - Compiles the loader (`bin/loader.exe`).
-  - Cleans up temp files.
+- The script will:
+  - Compile sources (MinGW-w64).
+  - Link them into a raw shellcode blob (merges `.text`, `.func`).
+  - Patch inline hook markers (optional, see diagram below).
+  - Convert the binary to a C byte array and embed in the loader template.
+  - Compile the loader (`bin/loader.exe`).
+  - Clean up temp files.
 
 ### 4. **Test**
 
-- Run `bin/loader.exe` on Windows/VM to execute your shellcode (loader marks memory executable and calls payload).
+- Run `bin/loader.exe` on Windows/VM to execute your shellcode (the loader marks memory executable and calls payload).
 
 ---
 
 ## 🧩 How It Works
 
-Based on [Print3M/c-to-shellcode](https://github.com/Print3M/c-to-shellcode) with modern extensions.
+- Functions intended for shellcode are marked with the `FUNC` macro, placing them in the `.func` section.
+- The Python build script compiles all sources and links them to a flat position-independent code (PIC) binary using a custom linker script.
+- The resulting binary is converted to a C array and embedded in a loader template.
+- The loader template is compiled to a Windows executable that allocates memory and executes your shellcode.
 
-**Build summary:**
-- Functions for shellcode go in `.func` (via `FUNC` macro).
-- Python build script compiles and links to a flat PIC binary.
-- Loader template executes the shellcode on Windows.
+---
+
+## 🖼️ Shellcode Structure
+
+Below is the layout of the final shellcode binary:
+
+```
++-------------------------------+
+|    Entry Point (.text)        |  (StartWrapper only)
++-------------------------------+
+|    Shellcode Functions (.func)|  (All other functions, helpers, API resolvers - marked with FUNC)
++-------------------------------+
+|    Strings and Values         |  (constants, literal strings, arrays, etc.)
++-------------------------------+
+```
+
+- **.text**: Only the shellcode entry point (`StartWrapper`).
+- **.func**: All other shellcode functions (helpers, logic, API resolvers, etc.) marked with the `FUNC` macro.
+- **strings/values**: Any referenced constants, arrays, and strings needed by your shellcode.
+
+> The linker script merges these into a single contiguous block for position-independent execution.
 
 ---
 
@@ -76,28 +106,24 @@ Based on [Print3M/c-to-shellcode](https://github.com/Print3M/c-to-shellcode) wit
 For inline hooks (`overwritten bytes - shellcode - jmp back`):
 
 - The shellcode entry (e.g. `StartWrapper`) should use `__attribute__((naked))`.
-  - **Note:** GCC may not emit 5 NOPs automatically.  
-    **Manually add 5 NOPs** at the end of your function.
-  - In a naked function, **do your own stack prep**: push/pop registers, adjust RSP, etc., since the compiler does not generate prologue/epilogue.
-    - Recommended: Push all registers except rsp and related, then `sub rsp, 0x32` for shadow space, and reverse at the end.
+  - **Note:** When using `__attribute__((naked))`, GCC emits a UD2 (`0x0f, 0x0b`) instruction at the end of the function instead of the usual `ret` (`0xc3`). This serves as a marker for patching.
+  - GCC may not emit NOPs automatically.  
+    **Manually add 3 NOPs** at the end of your function for the patching process (since a relative jump uses 5 bytes).
+  - In a naked function, **do your own stack prep**: push/pop registers, adjust `%rsp`, etc., since the compiler does not generate prologue/epilogue.
+    - Recommended: Push all registers except `%rsp` and related, then `sub $0x32, %rsp` for shadow space, and reverse at the end.
 - The build script's `patch_nop_to_jmp` function:
-  - Locates the NOP+UD2 marker at the end of your shellcode.
+  - Locates the 3 NOPs + UD2 marker at the end of your shellcode.
   - Replaces it with a relative JMP to the shellcode end, so you can manually append a jump back to the original code.
 
 ---
 
-## 📚 Notes
+## 📚 Notes & Troubleshooting
 
 - Add new modules in `src/` and update `base_names` in the Python script.
 - For custom payloads, edit the loader template or Python build logic.
-- **Security:** For research or defense only. Do not use for unauthorized access.
-
----
-
-## 💬 Troubleshooting
-
 - **Large payloads:** Optimize logic and minimize WinAPI usage.
 - **Build errors:** Check MinGW-w64 and Python 3 installation.
+- **Security:** For research or defense only. Do not use for unauthorized access.
 
 ---
 
@@ -116,16 +142,6 @@ Contributions and suggestions welcome!
 ## 📂 Author
 
 - [Rotem Navon](https://github.com/RotemNavon)
-
----
-
-## 🏁 Quick Start
-
-```bash
-sudo apt-get install python3 mingw-w64
-python3 c-to-shellcode.py
-# Transfer bin/loader.exe to Windows and run!
-```
 
 ---
 

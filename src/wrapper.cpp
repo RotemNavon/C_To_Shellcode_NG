@@ -189,5 +189,5 @@ shellcode_exit:
     //   "add $0x32, %rsp;"
     //   "pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8; pop %rbp; pop %rdi; pop %rsi; pop %rbx; pop %rdx; pop %rcx; pop %rax;"
     // );
-    // __asm__ __volatile__("nop; nop; nop; nop; nop;");
+    // __asm__ __volatile__("nop; nop; nop;");
 }

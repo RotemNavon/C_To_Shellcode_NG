@@ -29,21 +29,18 @@ def run_cmd(cmd):
     print(f"[+] {cmd}")
 
 def patch_nop_to_jmp(buf):
-    seq = b"\x90" * 5 + b"\x0f\x0b"
+    # Search for 3 NOPs + UD2 (0x90 0x90 0x90 0x0f 0x0b)
+    seq = b"\x90" * 3 + b"\x0f\x0b"
     idx = buf.find(seq)
     if idx == -1:
-        print("[-] No 5xNOP + UD2 sequence found.")
+        print("[-] No 3xNOP + UD2 sequence found.")
         return buf
-    jmp_from = idx + 5
+    jmp_from = idx
     jmp_to = len(buf)
-    rel_offset = jmp_to - jmp_from
+    rel_offset = jmp_to - (jmp_from + 5)
+    # Patch: overwrite 5 bytes with JMP rel32
     jmp_instr = b"\xE9" + rel_offset.to_bytes(4, "little")
-    patched = (
-        buf[:idx] +
-        jmp_instr +
-        b"\x90\x90" +
-        buf[idx+7:]
-    )
+    patched = buf[:idx] + jmp_instr + buf[idx+5:]
     print(f"[+] Patched JMP at offset {idx}, relative offset {rel_offset:#x}")
     return patched
 
@@ -103,7 +100,11 @@ if __name__ == "__main__":
     size = len(bytes)
     print(f"[+] Binary payload size: {size} bytes")
 
+    # Patch the NOPs + UD2 and write back to payload.bin
     bytes = patch_nop_to_jmp(bytes)
+    with open(payload_path, "wb") as f:
+        f.write(bytes)
+    print(f"[+] Updated {payload_path} after patching inline hook jump.")
 
     shellcode_array_code = emit_shellcode_c_array(bytes)
 
