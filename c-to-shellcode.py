@@ -9,7 +9,7 @@ SRC_DIR = "src"
 
 CC = "x86_64-w64-mingw32-g++-win32"
 BIN_PAYLOAD_CFLAGS = " ".join([
-    "-D_MM_MALLOC_H_INCLUDED",
+    "-D_MM_MALLOC_H_INCLUDED", # Define to avoid malloc.h inclusion
     "-Os",
     "-fPIC",
     "-Wno-c++23-extensions", # Suppress C++23 extension warnings

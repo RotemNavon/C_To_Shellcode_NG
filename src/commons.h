@@ -18,8 +18,6 @@
       : : : "%rax" \
   )
 
-#define MAX_FORWARDER_RECURSION_DEPTH 8
-
 // ---- X-Macro Arsenal ----
 #define WIN32_FUNC_ARSENAL \
     X(LoadLibraryA,                     "kernel32.dll") \

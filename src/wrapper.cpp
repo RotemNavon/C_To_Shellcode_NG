@@ -1,7 +1,7 @@
 #include "wrapper.h"
 #include "strUtils.h"
 
-FUNC void* GetModuleBase(const wchar_t* dllName)
+FUNC void* MyGetModuleHandle(const wchar_t* dllName)
 {
     if (!dllName) return nullptr;
 
@@ -28,13 +28,16 @@ FUNC void* GetModuleBase(const wchar_t* dllName)
         }
         current = current->Flink;
     }
+
     return nullptr;
 }
 
 FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllName, size_t dllNameCapacity, char* outExportName, size_t exportNameCapacity) {
     if (!forwarderString) return false;
+
     const char* period = MyStrchr(forwarderString, '.');
     if (!period) return false;
+
     size_t dllPartLen = (size_t)(period - forwarderString);
     if (dllPartLen >= dllNameCapacity) dllPartLen = dllNameCapacity - 1;
     MyStrncpy(outDllName, forwarderString, dllPartLen);
@@ -44,18 +47,22 @@ FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllNa
     if (actualDllLen < 4 || MyStricmp(outDllName + actualDllLen - 4, ".dll") != 0) {
         MyStrncpy(outDllName + actualDllLen, ".dll", dllNameCapacity - actualDllLen - 1);
     }
+
     MyStrncpy(outExportName, period + 1, exportNameCapacity - 1);
     outExportName[exportNameCapacity - 1] = '\0';
+
     return true;
 }
 
-FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int forwarderDepth = 0, void* (*LoadLibraryA)(const char*) = nullptr)
+FUNC void* MyGetProcAddress(void* moduleBase, const char* exportName, int forwarderDepth = 0)
 {
     if (!moduleBase || !exportName || forwarderDepth > MAX_FORWARDER_RECURSION_DEPTH) return nullptr;
 
     BYTE* moduleBytes = (BYTE*)moduleBase;
+
     IMAGE_DOS_HEADER* dosHeader = (IMAGE_DOS_HEADER*)moduleBytes;
     if (dosHeader->e_magic != IMAGE_DOS_SIGNATURE) return nullptr;
+
     IMAGE_NT_HEADERS* ntHeaders = (IMAGE_NT_HEADERS*)(moduleBytes + dosHeader->e_lfanew);
     if (ntHeaders->Signature != IMAGE_NT_SIGNATURE) return nullptr;
 
@@ -93,17 +100,19 @@ FUNC void* ResolveExportByName(void* moduleBase, const char* exportName, int for
                 while (*src && dst < forwarderDllW + 63) *dst++ = (wchar_t)(unsigned char)*src++;
                 *dst = L'\0';
 
-                void* forwarderModuleBase = GetModuleBase(forwarderDllW);
-                if (!forwarderModuleBase && LoadLibraryA)
-                    forwarderModuleBase = LoadLibraryA(forwarderDll);
+                void* forwarderModuleBase = MyGetModuleHandle(forwarderDllW);
+                if (!forwarderModuleBase && g_functions.LoadLibraryA)
+                    forwarderModuleBase = g_functions.LoadLibraryA(forwarderDll);
                 if (!forwarderModuleBase)
                     return nullptr;
 
-                return ResolveExportByName(forwarderModuleBase, forwarderExport, forwarderDepth + 1, LoadLibraryA);
+                return MyGetProcAddress(forwarderModuleBase, forwarderExport, forwarderDepth + 1);
             }
+
             return (void*)(moduleBytes + exportAddressRVA);
         }
     }
+
     return nullptr;
 }
 
@@ -119,10 +128,10 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
 
     // First resolve LoadLibraryA manually.
     wchar_t kernel32W[] = L"kernel32.dll";
-    void* kernel32Base = GetModuleBase(kernel32W);
+    void* kernel32Base = MyGetModuleHandle(kernel32W);
     if (!kernel32Base) return 1;
 
-    functions->LoadLibraryA = (decltype(functions->LoadLibraryA))ResolveExportByName(kernel32Base, "LoadLibraryA");
+    functions->LoadLibraryA = (decltype(functions->LoadLibraryA))MyGetProcAddress(kernel32Base, "LoadLibraryA");
     if (!functions->LoadLibraryA)
         return 1;
 
@@ -145,14 +154,14 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
         *dst = L'\0';
 
         // Get the module base
-        void* modBase = GetModuleBase(wDll);
+        void* modBase = MyGetModuleHandle(wDll);
 
         // If not loaded, use LoadLibraryA
         if (!modBase && functions->LoadLibraryA)
             modBase = ((void*(*)(const char*))functions->LoadLibraryA)(entry.dll);
 
         // Resolve export address
-        void* addr = modBase ? ResolveExportByName(modBase, entry.name, 0, (void*(*)(const char*))functions->LoadLibraryA) : nullptr;
+        void* addr = modBase ? MyGetProcAddress(modBase, entry.name, 0) : nullptr;
 
         // Store the resolved address in DYNAMIC_FUNCTIONS
         *(entry.ptr) = addr;
@@ -171,7 +180,7 @@ FUNC void RemoveVEHHandler()
     }
 }
 
-FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
+FUNC long WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
 {
     __debugbreak();
     CONTEXT* ctx = pExceptionInfo ? pExceptionInfo->ContextRecord : nullptr;
@@ -183,8 +192,11 @@ FUNC LONG WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
         ctx->Rip = (DWORD64)g_exit_address;
         return EXCEPTION_CONTINUE_EXECUTION;
     }
+
     return EXCEPTION_CONTINUE_SEARCH;
 }
+
+extern FUNC void Start();
 
 // NAKED // uncomment this if you want an inline hooking ready shellcode
 NO_OPTIMIZE void StartWrapper() // disable optimizations to insure correct exit label address capture
@@ -206,9 +218,9 @@ NO_OPTIMIZE void StartWrapper() // disable optimizations to insure correct exit 
         return;
 
     // add the vectored exception handler
-    g_veh_handle = g_functions.AddVectoredExceptionHandler ?
-        g_functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : nullptr;
-    if (!g_veh_handle) return;
+    g_veh_handle = g_functions.AddVectoredExceptionHandler ? g_functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : nullptr;
+    if (!g_veh_handle) 
+        return;
 
     Start();
 
