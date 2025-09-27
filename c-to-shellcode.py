@@ -67,6 +67,8 @@ def write_loader_cpp(shellcode_array_code):
     return loader_path
 
 if __name__ == "__main__":
+    output_file_name = input("Enter the output file name (e.g., \"payload\"): ")
+
     # List your source files (base names without extension)
     base_names = [
         f"{SRC_DIR}/main",
@@ -83,7 +85,7 @@ if __name__ == "__main__":
         run_cmd(f"{CC} -c {src_base}{file_ext} -o {obj_file} {BIN_PAYLOAD_CFLAGS}")
         object_files.append(obj_file)
 
-    payload_path = f"{BIN_DIR}/payload.bin"
+    payload_path = f"{BIN_DIR}/{output_file_name}.bin"
 
     # Produce flat binary with payload
     obj_files_str = " ".join(object_files)
@@ -113,7 +115,7 @@ if __name__ == "__main__":
     loader_cpp_path = write_loader_cpp(shellcode_array_code)
 
     # Compile loader.cpp to loader.exe
-    loader_exe_path = f"{BIN_DIR}/loader.exe"
+    loader_exe_path = f"{BIN_DIR}/{output_file_name}_loader.exe"
     run_cmd(f"{CC} {loader_cpp_path} -o {loader_exe_path}")
 
     # Remove loader.cpp
