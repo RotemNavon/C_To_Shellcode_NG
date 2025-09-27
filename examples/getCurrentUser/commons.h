@@ -9,16 +9,6 @@
 #define NO_OPTIMIZE __attribute__((optimize("O0")))
 #define GLOBAL_VAR inline
 
-#define ALIGN_STACK() \
-  __asm__ __volatile__( \
-      "mov %%rsp, %%rax;" \
-      "and $0xF, %%rax;" \
-      "jz 1f;" \
-      "sub $8, %%rsp;" \
-      "1:" \
-      : : : "%rax" \
-  )
-
 // ---- X-Macro Arsenal ----
 #define WIN32_FUNC_ARSENAL \
     X(LoadLibraryA,                     "kernel32.dll") \
@@ -38,9 +28,3 @@ struct DYNAMIC_FUNCTIONS
 
 // Global functions structure instance - defined here to avoid extern linkage issues
 GLOBAL_VAR DYNAMIC_FUNCTIONS g_functions = {};
-
-// Global exit address for VEH handler
-GLOBAL_VAR void* g_exit_address = nullptr;
-
-// Global VEH handle for cleanup
-GLOBAL_VAR void* g_veh_handle = nullptr;
