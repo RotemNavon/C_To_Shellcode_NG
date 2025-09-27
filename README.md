@@ -101,6 +101,15 @@ Below is the layout of the final shellcode binary:
 
 ---
 
+## 🗃️ Using Global Variables
+
+It is possible to use global variables in your shellcode, including both initialized and uninitialized globals.  
+**However, it's important to always initialize globals before their first use!**  
+When building shellcode as a flat binary, there is no operating system loader to zero out the `.bss` section or guarantee initial values.  
+Uninitialized globals may contain unpredictable data unless you set their value at runtime.
+
+---
+
 ## 🛠️ Inline Hook Patching (Sandwich Method)
 
 For inline hooks (`overwritten bytes - shellcode - jmp back`):

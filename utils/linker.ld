@@ -1,13 +1,10 @@
 OUTPUT_FORMAT("binary");
 
-BASE = 0x00;
-
 SECTIONS
 {
-    . = BASE;
-    .text : {
-        . = BASE;
-        *(.text)
-        *(.func)
-    }
+    . = 0x00;
+    entry : { *(.text) }
+    func  : { *(.func) }
+    data  : { *(.data) }
+    bss   : { *(.bss)  }
 }

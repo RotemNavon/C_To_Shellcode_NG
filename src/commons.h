@@ -1,6 +1,7 @@
 #pragma once
 #include <windows.h>
 #include <winternl.h>
+#include <stdio.h>
 
 #define FUNC __attribute__((section(".func")))
 
@@ -21,7 +22,9 @@
     X(LoadLibraryA,                     "kernel32.dll") \
     X(AddVectoredExceptionHandler,      "kernel32.dll") \
     X(RemoveVectoredExceptionHandler,   "kernel32.dll") \
-    X(ShellExecuteA,                    "shell32.dll")
+    X(ShellExecuteA,                    "Shell32.dll")  \
+    X(MessageBoxA,                      "user32.dll")   \
+    X(sprintf,                          "msvcrt.dll")
 
 // ---- Generate function pointer struct, using decltype
 struct DYNAMIC_FUNCTIONS
