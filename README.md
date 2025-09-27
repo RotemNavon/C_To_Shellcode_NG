@@ -32,7 +32,7 @@ python3 c-to-shellcode.py
 ### 1. **Environment**
 
 - **Build OS:** Linux
-- **Required:** Python 3, MinGW-w64 cross-compiler (`x86_64-w64-mingw32-g++`)
+- **Required:** Python 3, MinGW-w64 cross-compiler (`x86_64-w64-mingw32-g++-win32`)
 - **Install:**  
   ```bash
   sudo apt-get update
@@ -58,10 +58,10 @@ C_To_Shellcode_NG/
   ```
 - The script will:
   - Compile sources (MinGW-w64).
-  - Link them into a raw shellcode blob (merges `.text`, `.func`).
-  - Patch inline hook markers (optional, see diagram below).
+  - Link them into a raw shellcode blob (merges `.text`, `.func`, `.data`, `.bss`).
+  - Patch inline hook markers (optional, [see Inline Hook Patching](#️-inline-hook-patching-sandwich-method)).
   - Convert the binary to a C byte array and embed in the loader template.
-  - Compile the loader (`bin/loader.exe`).
+  - Compile the loader (`bin/<given_name>loader.exe`).
   - Clean up temp files.
 
 ### 4. **Test**
