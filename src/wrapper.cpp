@@ -166,7 +166,10 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
         // Store the resolved address in DYNAMIC_FUNCTIONS
         *(entry.ptr) = addr;
 
-        if (!addr) return 1; // error: could not resolve function
+        if (!addr)
+        {
+            return 1; // error: could not resolve function
+        }
     }
 
     return 0;

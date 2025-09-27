@@ -138,6 +138,41 @@ Any header file can be imported in your shellcode source files, **but only for u
 
 ---
 
+## 🛠️ ⚠️ CRT vs WinAPI Heap Functions
+
+### Problem: CRT Functions and Shellcode
+
+When writing shellcode or position-independent code, using standard C runtime (CRT) heap functions like `malloc`, `calloc`, `realloc`, and `free` can cause issues:
+
+- These functions are located in `msvcrt.dll`, which may not always be loaded or available depending on Windows configuration.
+- Using X-macros or dynamic resolution for these symbols in C++ can cause compilation problems due to type mismatches and missing declarations.
+- In many cases, the C runtime is not initialized or available in the shellcode environment.
+
+### Solution: Use Native WinAPI Heap Functions!
+
+Instead of CRT functions, use the Windows API equivalents from `kernel32.dll`:
+
+| CRT Function | WinAPI Equivalent           | DLL           |
+|--------------|----------------------------|---------------|
+| malloc       | `HeapAlloc`                | kernel32.dll  |
+| calloc       | `HeapAlloc` (with flag)    | kernel32.dll  |
+| realloc      | `HeapReAlloc`              | kernel32.dll  |
+| free         | `HeapFree`                 | kernel32.dll  |
+
+#### Example Usage:
+
+```cpp
+// Replace all uses of malloc/calloc/realloc/free with WinAPI equivalents:
+HANDLE hHeap = g_functions.GetProcessHeap();
+char* buffer = (char*)g_functions.HeapAlloc(hHeap, HEAP_ZERO_MEMORY, bufferSize);
+// For realloc:
+buffer = (char*)g_functions.HeapReAlloc(hHeap, HEAP_ZERO_MEMORY, buffer, newSize);
+// For free:
+g_functions.HeapFree(hHeap, 0, buffer);
+```
+
+---
+
 ## 🛠️ Inline Hook Patching (Sandwich Method)
 
 For inline hooks (`overwritten bytes - shellcode - jmp back`):
