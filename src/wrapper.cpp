@@ -111,30 +111,54 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
 {
     if (!functions) return 1;
 
+    struct FUNC_META {
+        const char* name;
+        const char* dll;
+        void** ptr;
+    };
+
+    // First resolve LoadLibraryA manually.
     wchar_t kernel32W[] = L"kernel32.dll";
     void* kernel32Base = GetModuleBase(kernel32W);
     if (!kernel32Base) return 1;
 
-    functions->LoadLibraryA = (decltype(&LoadLibraryA))ResolveExportByName(kernel32Base, "LoadLibraryA");
+    functions->LoadLibraryA = (decltype(functions->LoadLibraryA))ResolveExportByName(kernel32Base, "LoadLibraryA");
     if (!functions->LoadLibraryA)
         return 1;
 
-#define X(name, dll) \
-    { \
-        wchar_t wDll[64]; \
-        const char* src = dll; \
-        wchar_t* dst = wDll; \
-        while (*src && dst < wDll + 63) *dst++ = (wchar_t)(unsigned char)*src++; \
-        *dst = L'\0'; \
-        void* modBase = GetModuleBase(wDll); \
-        if (!modBase && functions->LoadLibraryA) \
-            modBase = functions->LoadLibraryA(dll); \
-        auto loader = (void* (*)(const char*))functions->LoadLibraryA; \
-        functions->name = modBase ? (decltype(&name))ResolveExportByName(modBase, #name, 0, loader) : nullptr; \
-        if (!functions->name) return 1; \
+    // Define the meta array for resolution
+    #define X(name, dll) { #name, dll, (void**)&functions->name },
+    FUNC_META meta[] = {
+        WIN32_FUNC_ARSENAL
+    };
+    #undef X
+
+    // Loop through the rest of the APIs starting from index 1
+    for (size_t i = 1; i < sizeof(meta)/sizeof(meta[0]); ++i) {
+        FUNC_META& entry = meta[i];
+
+        // Convert DLL name to wchar_t
+        wchar_t wDll[64];
+        const char* src = entry.dll;
+        wchar_t* dst = wDll;
+        while (*src && dst < wDll + 63) *dst++ = (wchar_t)(unsigned char)*src++;
+        *dst = L'\0';
+
+        // Get the module base
+        void* modBase = GetModuleBase(wDll);
+
+        // If not loaded, use LoadLibraryA
+        if (!modBase && functions->LoadLibraryA)
+            modBase = ((void*(*)(const char*))functions->LoadLibraryA)(entry.dll);
+
+        // Resolve export address
+        void* addr = modBase ? ResolveExportByName(modBase, entry.name, 0, (void*(*)(const char*))functions->LoadLibraryA) : nullptr;
+
+        // Store the resolved address in DYNAMIC_FUNCTIONS
+        *(entry.ptr) = addr;
+
+        if (!addr) return 1; // error: could not resolve function
     }
-    WIN32_FUNC_ARSENAL
-#undef X
 
     return 0;
 }
