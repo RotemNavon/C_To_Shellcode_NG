@@ -216,10 +216,10 @@ This enables the `INLINE_HOOK_MODE` define, which:
 
 - Adds register preservation (push/pop all registers)
 - Allocates shadow space (`sub $0x32, %rsp`)
-- Adds 3 NOPs at the end as a marker for automatic patching
+- Adds a NOP and 2 UD2 bytes at the end as a marker for automatic patching
 
 The build script's `patch_inline_hook` function automatically:
-- Locates the 3 NOPs + UD2 marker (`0x90 0x90 0x90 0x0f 0x0b`) at the shellcode end
+- Locates the NOP + 2xUD2 marker (`0x90 0x0f 0x0b 0x0f 0x0b`) at the shellcode end
 - Replaces it with a 5-byte relative JMP to the end of the shellcode
 - This JMP serves as the "return point" where you can add your own absolute jump back to the target binary
 
