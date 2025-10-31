@@ -209,7 +209,7 @@ This creates a "sandwich" where execution flows: Original Code → Your Shellcod
 Use the `--inline` flag when building:
 
 ```bash
-python3 c-to-shellcode.py payload --inline
+python3 c-to-shellcode.py --inline
 ```
 
 This enables the `INLINE_HOOK_MODE` define, which:
