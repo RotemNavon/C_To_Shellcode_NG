@@ -201,16 +201,19 @@ FUNC long WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
 
 extern FUNC void Start();
 
-// NAKED // uncomment this if you want an inline hooking ready shellcode
-NO_OPTIMIZE void StartWrapper() // disable optimizations to insure correct exit label address capture
+#ifdef INLINE_HOOK_MODE
+NAKED NO_OPTIMIZE void StartWrapper()
+#else
+NO_OPTIMIZE void StartWrapper()
+#endif
 {
-    // Recommended: For inline hook shellcode, push all registers except rsp and such, and sub rsp by at least 0x32 for shadow space, pop/add at the end.
-    
-    // uncomment this if you want an inline hooking ready shellcode 
-    // __asm__ __volatile__(
-    //   "push %rax; push %rcx; push %rdx; push %rbx; push %rsi; push %rdi; push %rbp; push %r8; push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15;"
-    //   "sub $0x32, %rsp;"
-    // );
+#ifdef INLINE_HOOK_MODE
+    __asm__ __volatile__(
+        "push %rax; push %rcx; push %rdx; push %rbx; push %rsi; push %rdi; push %rbp; "
+        "push %r8; push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15;"
+        "sub $0x32, %rsp;"
+    );
+#endif
 
     ALIGN_STACK();
 
@@ -231,10 +234,12 @@ NO_OPTIMIZE void StartWrapper() // disable optimizations to insure correct exit 
 
 shellcode_exit:
 
-    // uncomment this if you want an inline hooking ready shellcode 
-    // __asm__ __volatile__(
-    //   "add $0x32, %rsp;"
-    //   "pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8; pop %rbp; pop %rdi; pop %rsi; pop %rbx; pop %rdx; pop %rcx; pop %rax;"
-    // );
-    // __asm__ __volatile__("nop; nop; nop;");
+#ifdef INLINE_HOOK_MODE
+    __asm__ __volatile__(
+        "add $0x32, %rsp;"
+        "pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8; "
+        "pop %rbp; pop %rdi; pop %rsi; pop %rbx; pop %rdx; pop %rcx; pop %rax;"
+    );
+    __asm__ __volatile__("nop; ud2; ud2;");
+#endif
 }

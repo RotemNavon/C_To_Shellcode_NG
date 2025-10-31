@@ -173,19 +173,64 @@ g_functions.HeapFree(hHeap, 0, buffer);
 
 ---
 
-## 🛠️ Inline Hook Patching (Sandwich Method)
+## 🪝 Inline Hook Patching (Sandwich Method)
 
-For inline hooks (`overwritten bytes - shellcode - jmp back`):
+### What is Inline Hooking?
 
-- The shellcode entry (e.g. `StartWrapper`) should use `__attribute__((naked))`.
-  - **Note:** When using `__attribute__((naked))`, GCC emits a UD2 (`0x0f, 0x0b`) instruction at the end of the function instead of the usual `ret` (`0xc3`). This serves as a marker for patching.
-  - GCC may not emit NOPs automatically.  
-    **Manually add 3 NOPs** at the end of your function for the patching process (since a relative jump uses 5 bytes).
-  - In a naked function, **do your own stack prep**: push/pop registers, adjust `%rsp`, etc., since the compiler does not generate prologue/epilogue.
-    - Recommended: Push all registers except `%rsp` and related, then `sub $0x32, %rsp` for shadow space, and reverse at the end.
-- The build script's `patch_inline_hook` function:
-  - Locates the 3 NOPs + UD2 marker at the end of your shellcode.
-  - Replaces it with a relative JMP to the shellcode end, so you can manually append a jump back to the original code.
+Inline hooking allows you to redirect execution from an existing binary to your shellcode and back. Instead of replacing large chunks of code, you use the **sandwich method**:
+
+```
+[Target Binary at offset X]
+    ↓ (12-byte absolute JMP)
+[Allocated Memory with Shellcode]
+├─ Overwritten bytes (original 12 bytes from offset X)
+├─ Your shellcode logic
+└─ JMP back to offset X+12 (resume normal execution)
+```
+
+**Why 12 bytes?**  
+```
+movabs rax, <x64 address> : 0x48, 0xB8, ??, ??, ??, ??, ??, ??, ??, ??  -> 10 bytes  
+jmp rax                   : 0xff, 0xe0                                  -> 2 bytes
+```
+
+### How It Works
+
+1. **Allocate memory** for your shellcode in the target process
+2. **Copy the first 12 bytes** from offset X into your shellcode (to preserve original instructions)
+3. **Write your shellcode logic** in the middle
+4. **Add a JMP back** to offset X+12 to resume normal program flow
+5. **Overwrite offset X** in the target binary with a 12-byte absolute jump to your allocated shellcode
+
+This creates a "sandwich" where execution flows: Original Code → Your Shellcode → Back to Original Code
+
+### Building for Inline Hooks
+
+Use the `--inline` flag when building:
+
+```bash
+python3 c-to-shellcode.py payload --inline
+```
+
+This enables the `INLINE_HOOK_MODE` define, which:
+
+- Adds register preservation (push/pop all registers)
+- Allocates shadow space (`sub $0x32, %rsp`)
+- Adds 3 NOPs at the end as a marker for automatic patching
+
+The build script's `patch_inline_hook` function automatically:
+- Locates the 3 NOPs + UD2 marker (`0x90 0x90 0x90 0x0f 0x0b`) at the shellcode end
+- Replaces it with a 5-byte relative JMP to the end of the shellcode
+- This JMP serves as the "return point" where you can add your own absolute jump back to the target binary
+
+### Implementation Requirements
+
+When using `--inline` mode:
+
+- The entry function (`StartWrapper`) should preserve all registers and allocate shadow space
+- At the shellcode start, include the 12 overwritten bytes from the target binary
+- At the end, add your own absolute jump back to offset X+12 in the target binary
+- The automatic patching handles the exit jump placeholder
 
 ---
 

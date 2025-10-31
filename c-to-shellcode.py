@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import subprocess
 import os
+import argparse
 from pathlib import Path
 from typing import List
 
@@ -8,19 +9,20 @@ from typing import List
 class ShellcodeBuilder:
     """Builds shellcode payloads from C++ sources and generates loader executables."""
     
-    NOP_UD2_SEQUENCE = b"\x90" * 3 + b"\x0f\x0b"
+    NOP_UD2_SEQUENCE = b"\x90" + b"\x0f\x0b" * 2
     BYTES_PER_LINE = 20
     
-    def __init__(self):
+    def __init__(self, inline_hook_mode: bool = False):
         self.bin_dir = Path("bin")
         self.utils_dir = Path("utils")
         self.src_dir = Path("src")
         self.compiler = "x86_64-w64-mingw32-g++-win32"
+        self.inline_hook_mode = inline_hook_mode
         self.cflags = self._build_compiler_flags()
         
     def _build_compiler_flags(self) -> str:
         """Returns compiler flags for payload generation."""
-        return " ".join([
+        flags = [
             "-D_MM_MALLOC_H_INCLUDED",
             "-Os",
             "-fPIC",
@@ -32,7 +34,12 @@ class ShellcodeBuilder:
             "-fno-ident",
             "-e StartWrapper",
             "-s",
-        ])
+        ]
+        
+        if self.inline_hook_mode:
+            flags.append("-DINLINE_HOOK_MODE")
+        
+        return " ".join(flags)
     
     def _run_command(self, cmd: str) -> None:
         """Executes a shell command and logs it."""
@@ -147,7 +154,8 @@ class ShellcodeBuilder:
         
         print(f"[+] Binary payload size: {len(payload_bytes)} bytes")
         
-        payload_bytes = self.patch_inline_hook(payload_bytes)
+        if(self.inline_hook_mode):
+            payload_bytes = self.patch_inline_hook(payload_bytes)
         
         with open(payload_path, "wb") as f:
             f.write(payload_bytes)
@@ -162,7 +170,10 @@ class ShellcodeBuilder:
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Build shellcode payloads from C++ sources")
+    parser.add_argument("--inline", action="store_true", help="Enable inline hook mode")
+    args = parser.parse_args()
+
+    builder = ShellcodeBuilder(inline_hook_mode=args.inline)
     output_name = input("Enter the output file name (e.g., \"payload\"): ")
-    
-    builder = ShellcodeBuilder()
     builder.build(output_name)
