@@ -33,11 +33,6 @@ python3 c-to-shellcode.py
 
 - **Build OS:** Linux
 - **Required:** Python 3, MinGW-w64 cross-compiler (`x86_64-w64-mingw32-g++-win32`)
-- **Install:**  
-  ```bash
-  sudo apt-get update
-  sudo apt-get install python3 mingw-w64
-  ```
 
 ### 2. **Project Structure**
 
@@ -46,6 +41,7 @@ C_To_Shellcode_NG/
 ├── src/            # C++ shellcode sources
 ├── utils/          # Templates, linker scripts
 ├── bin/            # Output files (gitignored)
+├── examples/       # Example shellcode sources
 ├── c-to-shellcode.py
 ...
 ```
@@ -75,7 +71,7 @@ C_To_Shellcode_NG/
 - Functions intended for shellcode are marked with the `FUNC` macro, placing them in the `.func` section.
 - The Python build script compiles all sources and links them to a flat position-independent code (PIC) binary using a custom linker script.
 - The resulting binary is converted to a C array and embedded in a loader template.
-- The loader template is compiled to a Windows executable that allocates memory and executes your shellcode.
+- The loader template is compiled to a Windows executable that executes your shellcode.
 
 ---
 
@@ -85,12 +81,12 @@ Below is the layout of the final shellcode binary:
 
 ```
 +-------------------------------+
-|    Entry Point (.text)        |  (StartWrapper only)
+|    Entry Point (.text)        |  (StartWrapper function only)
 +-------------------------------+
 |    Shellcode Functions (.func)|  (All other functions, helpers, API resolvers - marked with FUNC)
 +-------------------------------+
 |    Strings, Values, Globals   |  (constants, literal strings, arrays, GLOBAL_VAR globals)
-|        (.data + .bss)         | 
+|        (.data + .bss)         |
 +-------------------------------+
 ```
 
@@ -109,6 +105,7 @@ There are two cases:
 
 **1. Single-source-file global**  
 Declare as `GLOBAL_VAR` directly in the `.cpp` file:
+
 ```cpp
 // main.cpp
 GLOBAL_VAR int my_counter = 0;
@@ -116,11 +113,14 @@ GLOBAL_VAR int my_counter = 0;
 
 **2. Multi-source-files global**  
 Declare as `GLOBAL_VAR` in a shared header (`.h`):
+
 ```cpp
 // wrapper.h
 GLOBAL_VAR DYNAMIC_FUNCTIONS g_functions = {};
 ```
+
 Access from any file by including the header:
+
 ```cpp
 // main.cpp
 #include "wrapper.h"
@@ -152,12 +152,12 @@ When writing shellcode or position-independent code, using standard C runtime (C
 
 Instead of CRT functions, use the Windows API equivalents from `kernel32.dll`:
 
-| CRT Function | WinAPI Equivalent           | DLL           |
-|--------------|----------------------------|---------------|
-| malloc       | `HeapAlloc`                | kernel32.dll  |
-| calloc       | `HeapAlloc` (with flag)    | kernel32.dll  |
-| realloc      | `HeapReAlloc`              | kernel32.dll  |
-| free         | `HeapFree`                 | kernel32.dll  |
+| CRT Function | WinAPI Equivalent       | DLL          |
+| ------------ | ----------------------- | ------------ |
+| malloc       | `HeapAlloc`             | kernel32.dll |
+| calloc       | `HeapAlloc` (with flag) | kernel32.dll |
+| realloc      | `HeapReAlloc`           | kernel32.dll |
+| free         | `HeapFree`              | kernel32.dll |
 
 #### Example Usage:
 
@@ -183,7 +183,7 @@ For inline hooks (`overwritten bytes - shellcode - jmp back`):
     **Manually add 3 NOPs** at the end of your function for the patching process (since a relative jump uses 5 bytes).
   - In a naked function, **do your own stack prep**: push/pop registers, adjust `%rsp`, etc., since the compiler does not generate prologue/epilogue.
     - Recommended: Push all registers except `%rsp` and related, then `sub $0x32, %rsp` for shadow space, and reverse at the end.
-- The build script's `patch_nop_to_jmp` function:
+- The build script's `patch_inline_hook` function:
   - Locates the 3 NOPs + UD2 marker at the end of your shellcode.
   - Replaces it with a relative JMP to the shellcode end, so you can manually append a jump back to the original code.
 

@@ -1,6 +1,6 @@
 #include "strUtils.h"
 
-FUNC size_t MyStrlen(const char* str)
+FUNC size_t MyStrLen(const char* str)
 {
     size_t len = 0;
     while (str && str[len])
@@ -8,7 +8,7 @@ FUNC size_t MyStrlen(const char* str)
     return len;
 }
 
-FUNC char* MyStrncpy(char* dest, const char* src, size_t n)
+FUNC char* MyStrNCpy(char* dest, const char* src, size_t n)
 {
     size_t i;
     for (i = 0; i < n && src[i]; ++i)
@@ -18,7 +18,7 @@ FUNC char* MyStrncpy(char* dest, const char* src, size_t n)
     return dest;
 }
 
-FUNC int MyStricmp(const char* s1, const char* s2)
+FUNC int MyStrICmp(const char* s1, const char* s2)
 {
     if (!s1 || !s2) return (s1 == s2) ? 0 : (s1 ? 1 : -1);
     while (*s1 && *s2) {
@@ -43,7 +43,7 @@ FUNC int MyStrCmp(const char* s1, const char* s2)
     return (int)(unsigned char)*s1 - (unsigned char)*s2;
 }
 
-FUNC int MyWcsIcmp(const wchar_t* s1, const wchar_t* s2)
+FUNC int MyWcsICmp(const wchar_t* s1, const wchar_t* s2)
 {
     if (!s1 || !s2) return (s1 == s2) ? 0 : (s1 ? 1 : -1);
     while (*s1 && *s2) {
@@ -66,7 +66,7 @@ FUNC const wchar_t* GetFilenameW(const wchar_t* path)
     return last;
 }
 
-FUNC char* MyStrchr(const char* str, int c)
+FUNC char* MyStrChr(const char* str, int c)
 {
     if (!str) return nullptr;
     while (*str) {

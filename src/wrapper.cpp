@@ -23,7 +23,7 @@ FUNC void* MyGetModuleHandle(const wchar_t* dllName)
         if (dll && dll->FullDllName.Buffer)
         {
             const wchar_t* filename = GetFilenameW(dll->FullDllName.Buffer);
-            if (filename && MyWcsIcmp(filename, dllName) == 0)
+            if (filename && MyWcsICmp(filename, dllName) == 0)
                 return dll->DllBase;
         }
         current = current->Flink;
@@ -35,20 +35,20 @@ FUNC void* MyGetModuleHandle(const wchar_t* dllName)
 FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllName, size_t dllNameCapacity, char* outExportName, size_t exportNameCapacity) {
     if (!forwarderString) return false;
 
-    const char* period = MyStrchr(forwarderString, '.');
+    const char* period = MyStrChr(forwarderString, '.');
     if (!period) return false;
 
     size_t dllPartLen = (size_t)(period - forwarderString);
     if (dllPartLen >= dllNameCapacity) dllPartLen = dllNameCapacity - 1;
-    MyStrncpy(outDllName, forwarderString, dllPartLen);
+    MyStrNCpy(outDllName, forwarderString, dllPartLen);
     outDllName[dllPartLen] = '\0';
 
-    size_t actualDllLen = MyStrlen(outDllName);
-    if (actualDllLen < 4 || MyStricmp(outDllName + actualDllLen - 4, ".dll") != 0) {
-        MyStrncpy(outDllName + actualDllLen, ".dll", dllNameCapacity - actualDllLen - 1);
+    size_t actualDllLen = MyStrLen(outDllName);
+    if (actualDllLen < 4 || MyStrICmp(outDllName + actualDllLen - 4, ".dll") != 0) {
+        MyStrNCpy(outDllName + actualDllLen, ".dll", dllNameCapacity - actualDllLen - 1);
     }
 
-    MyStrncpy(outExportName, period + 1, exportNameCapacity - 1);
+    MyStrNCpy(outExportName, period + 1, exportNameCapacity - 1);
     outExportName[exportNameCapacity - 1] = '\0';
 
     return true;
