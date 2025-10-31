@@ -23,6 +23,7 @@ python3 c-to-shellcode.py
 - **Flexible output** — produce raw binaries, C arrays, or ready-to-run loader executables.
 - **Cross-platform build** — compile on Linux, execute on Windows.
 - **Dynamic WinAPI resolution** — handles direct and forwarded exports at runtime.
+- **Vectored Exception Handler (VEH)** — automatic exception handling wrapper around user payload logic.
 - **Modular & extensible** — add source files, payload types, or utilities easily.
 
 ---
@@ -68,33 +69,32 @@ C_To_Shellcode_NG/
 
 ## 🧩 How It Works
 
-- Functions intended for shellcode are marked with the `FUNC` macro, placing them in the `.func` section.
-- The Python build script compiles all sources and links them to a flat position-independent code (PIC) binary using a custom linker script.
-- The resulting binary is converted to a C array and embedded in a loader template.
-- The loader template is compiled to a Windows executable that executes your shellcode.
+The framework generates position-independent shellcode by compiling C++ code without dependencies and merging sections into a single flat binary:
+
+1. **Compile without dependencies**: Sources are compiled with `-nostdlib`, `-nostartfiles`, and `-ffreestanding` flags, producing object files with no external dependencies.
+
+2. **Custom linker script**: A custom `ld` script (`utils/linker.ld`) merges the `.text`, `.func`, `.data`, and `.bss` sections into a single contiguous position-independent code (PIC) block.
+
+3. **Flat binary output**: The result is a raw binary blob where all code and data exist in one continuous memory space.
+
+4. **Embed in loader**: The binary is converted to a C array and embedded in a loader template, which is compiled into a Windows executable that executes the shellcode.
 
 ---
 
 ## 🖼️ Shellcode Structure
 
-Below is the layout of the final shellcode binary:
+Below is the memory layout of the final shellcode binary:
 
 ```
 +-------------------------------+
-|    Entry Point (.text)        |  (StartWrapper function only)
+|    Entry Point (.text)        |  ← StartWrapper function only
 +-------------------------------+
-|    Shellcode Functions (.func)|  (All other functions, helpers, API resolvers - marked with FUNC)
+|    Shellcode Functions (.func)|  ← All FUNC-marked functions
 +-------------------------------+
-|    Strings, Values, Globals   |  (constants, literal strings, arrays, GLOBAL_VAR globals)
+|    Strings, Values, Globals   |  ← Constants, literals, GLOBAL_VAR variables
 |        (.data + .bss)         |
 +-------------------------------+
 ```
-
-- **.text**: Only the shellcode entry point (`StartWrapper`).
-- **.func**: All other shellcode functions.
-- **.data + .bss**: Any referenced constants, arrays, strings, and all global variables.
-
-> The linker script merges these into a single contiguous block for position-independent execution.
 
 ---
 
