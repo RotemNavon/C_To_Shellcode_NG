@@ -67,10 +67,10 @@ class ShellcodeBuilder:
         
         return object_files
     
-    def link_payload(self, object_files: List[str], output_name: str) -> Path:
-        """Links object files into a flat binary payload."""
+    def link_payload(self, object_files: List[str], output_name: str, output_dir: Path) -> Path:
+        """Links object files into a flat binary payload inside the output directory."""
         print("[+] Linking object files to binary payload")
-        payload_path = self.bin_dir / f"{output_name}.bin"
+        payload_path = output_dir / f"{output_name}.bin"
         obj_files_str = " ".join(object_files)
         linker_script = self.utils_dir / "linker.ld"
         
@@ -118,11 +118,11 @@ class ShellcodeBuilder:
         
         return "unsigned char payload[] = {\n    " + "\n    ".join(lines) + "\n};\n"
     
-    def generate_loader(self, shellcode_array: str, output_name: str) -> Path:
-        """Generates loader C++ file from template with embedded shellcode."""
+    def generate_loader(self, shellcode_array: str, output_name: str, output_dir: Path) -> Path:
+        """Generates loader C++ file from template with embedded shellcode inside the output directory."""
         print("[+] Generating loader with embedded shellcode")
         template_path = self.utils_dir / "loaderTemplate.cpp"
-        loader_path = self.bin_dir / "loader.cpp"
+        loader_path = output_dir / "loader.cpp"
         
         with open(template_path, "r") as f:
             template = f.read()
@@ -135,36 +135,40 @@ class ShellcodeBuilder:
         print(f"[+] Written loader with embedded shellcode to {loader_path}")
         return loader_path
     
-    def compile_loader(self, loader_path: Path, output_name: str) -> Path:
-        """Compiles loader C++ file to executable."""
-        loader_exe = self.bin_dir / f"{output_name}_loader.exe"
+    def compile_loader(self, loader_path: Path, output_name: str, output_dir: Path) -> Path:
+        """Compiles loader C++ file to executable inside the output directory."""
+        loader_exe = output_dir / f"{output_name}_loader.exe"
         cmd = f"{self.compiler} {loader_path} -o {loader_exe}"
         self._run_command(cmd)
         return loader_exe
     
     def build(self, output_name: str) -> None:
-        """Orchestrates the complete build process."""
+        """Orchestrates the complete build process, placing all outputs in a subfolder of bin."""
+        # Create output directory inside bin
+        output_dir = self.bin_dir / output_name
+        output_dir.mkdir(parents=True, exist_ok=True)
+
         object_files = self.compile_sources()
-        
-        payload_path = self.link_payload(object_files, output_name)
+
+        payload_path = self.link_payload(object_files, output_name, output_dir)
         self.cleanup_object_files(object_files)
-        
+
         with open(payload_path, "rb") as f:
             payload_bytes = bytearray(f.read())
-        
+
         print(f"[+] Binary payload size: {len(payload_bytes)} bytes")
-        
-        if(self.inline_hook_mode):
+
+        if self.inline_hook_mode:
             payload_bytes = self.patch_inline_hook(payload_bytes)
-        
+
         with open(payload_path, "wb") as f:
             f.write(payload_bytes)
-        
+
         shellcode_array = self.convert_to_c_array(payload_bytes)
-        loader_path = self.generate_loader(shellcode_array, output_name)
-        
-        loader_exe = self.compile_loader(loader_path, output_name)
-        
+        loader_path = self.generate_loader(shellcode_array, output_name, output_dir)
+
+        loader_exe = self.compile_loader(loader_path, output_name, output_dir)
+
         print(f"[+] Loader executable ready at {loader_exe}")
 
 
