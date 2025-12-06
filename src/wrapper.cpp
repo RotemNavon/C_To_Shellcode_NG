@@ -1,4 +1,4 @@
-#include "wrapper.h"
+#include "commons.h"
 #include "strUtils.h"
 
 FUNC void* MyGetModuleHandle(const wchar_t* dllName)
@@ -54,9 +54,9 @@ FUNC bool ParseExportForwarderString(const char* forwarderString, char* outDllNa
     return true;
 }
 
-FUNC void* MyGetProcAddress(void* moduleBase, const char* exportName, int forwarderDepth = 0)
+FUNC void* MyGetProcAddress(DYNAMIC_FUNCTIONS* g_functions, void* moduleBase, const char* exportName, int forwarderDepth = 0)
 {
-    if (!moduleBase || !exportName || forwarderDepth > MAX_FORWARDER_RECURSION_DEPTH) return nullptr;
+    if (!moduleBase || !exportName || forwarderDepth > 8) return nullptr;
 
     BYTE* moduleBytes = (BYTE*)moduleBase;
 
@@ -101,12 +101,12 @@ FUNC void* MyGetProcAddress(void* moduleBase, const char* exportName, int forwar
                 *dst = L'\0';
 
                 void* forwarderModuleBase = MyGetModuleHandle(forwarderDllW);
-                if (!forwarderModuleBase && g_functions.LoadLibraryA)
-                    forwarderModuleBase = g_functions.LoadLibraryA(forwarderDll);
+                if (!forwarderModuleBase && g_functions->LoadLibraryA)
+                    forwarderModuleBase = g_functions->LoadLibraryA(forwarderDll);
                 if (!forwarderModuleBase)
                     return nullptr;
 
-                return MyGetProcAddress(forwarderModuleBase, forwarderExport, forwarderDepth + 1);
+                return MyGetProcAddress(g_functions, forwarderModuleBase, forwarderExport, forwarderDepth + 1);
             }
 
             return (void*)(moduleBytes + exportAddressRVA);
@@ -131,7 +131,7 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
     void* kernel32Base = MyGetModuleHandle(kernel32W);
     if (!kernel32Base) return 1;
 
-    functions->LoadLibraryA = (decltype(functions->LoadLibraryA))MyGetProcAddress(kernel32Base, "LoadLibraryA");
+    functions->LoadLibraryA = (decltype(functions->LoadLibraryA))MyGetProcAddress(functions, kernel32Base, "LoadLibraryA");
     if (!functions->LoadLibraryA)
         return 1;
 
@@ -161,7 +161,7 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
             modBase = ((void*(*)(const char*))functions->LoadLibraryA)(entry.dll);
 
         // Resolve export address
-        void* addr = modBase ? MyGetProcAddress(modBase, entry.name, 0) : nullptr;
+        void* addr = modBase ? MyGetProcAddress(functions, modBase, entry.name, 0) : nullptr;
 
         // Store the resolved address in DYNAMIC_FUNCTIONS
         *(entry.ptr) = addr;
@@ -175,71 +175,44 @@ FUNC int ResolveDynamicFunctions(DYNAMIC_FUNCTIONS* functions)
     return 0;
 }
 
-FUNC void RemoveVEHHandler()
+extern FUNC void Main(DYNAMIC_FUNCTIONS* g_functions);
+
+FUNC void StartWrapperImpl()
 {
-    if (g_veh_handle && g_functions.RemoveVectoredExceptionHandler) {
-        g_functions.RemoveVectoredExceptionHandler(g_veh_handle);
-        g_veh_handle = nullptr;
-    }
+    DYNAMIC_FUNCTIONS g_functions = {};
+    if (ResolveDynamicFunctions(&g_functions) != 0) return;
+
+    Main(&g_functions);
 }
-
-FUNC long WINAPI GeneralExceptionHandler(PEXCEPTION_POINTERS pExceptionInfo)
-{
-    __debugbreak();
-    CONTEXT* ctx = pExceptionInfo ? pExceptionInfo->ContextRecord : nullptr;
-    if (ctx && g_exit_address && ctx->Rip != (DWORD64)g_exit_address) {
-        // Remove the VEH handler to prevent re-entry
-        RemoveVEHHandler();
-        
-        // Jump to clean exit point
-        ctx->Rip = (DWORD64)g_exit_address;
-        return EXCEPTION_CONTINUE_EXECUTION;
-    }
-
-    return EXCEPTION_CONTINUE_SEARCH;
-}
-
-extern FUNC void Start();
 
 #ifdef INLINE_HOOK_MODE
-NAKED NO_OPTIMIZE void StartWrapper()
+    #define STACK_ALLOC_SIZE  0x38
+    #define WRAPPER_EXIT      "nop; ud2; ud2;"
 #else
-NO_OPTIMIZE void StartWrapper()
+    #define STACK_ALLOC_SIZE  0x40
+    #define WRAPPER_EXIT      "ret;"
 #endif
+
+__attribute__((naked, optimize("O0"))) void StartWrapper()
 {
-#ifdef INLINE_HOOK_MODE
     __asm__ __volatile__(
-        "push %rax; push %rcx; push %rdx; push %rbx; push %rsi; push %rdi; push %rbp; "
-        "push %r8; push %r9; push %r10; push %r11; push %r12; push %r13; push %r14; push %r15;"
-        "sub $0x32, %rsp;"
+        "push %%rax; push %%rcx; push %%rdx; push %%rbx; push %%rsi; push %%rdi; push %%rbp; "
+        "push %%r8; push %%r9; push %%r10; push %%r11; push %%r12; push %%r13; push %%r14; push %%r15;"
+        "sub %0, %%rsp;"
+        :
+        : "i" (STACK_ALLOC_SIZE)
+        : "memory"
     );
-#endif
 
-    ALIGN_STACK();
+    StartWrapperImpl();
 
-    g_exit_address = &&shellcode_exit;
-
-    // resolve all api functions
-    if (ResolveDynamicFunctions(&g_functions) != 0)
-        return;
-
-    // add the vectored exception handler
-    g_veh_handle = g_functions.AddVectoredExceptionHandler ? g_functions.AddVectoredExceptionHandler(1, GeneralExceptionHandler) : nullptr;
-    if (!g_veh_handle) 
-        return;
-
-    Start();
-
-    RemoveVEHHandler();
-
-shellcode_exit:
-
-#ifdef INLINE_HOOK_MODE
     __asm__ __volatile__(
-        "add $0x32, %rsp;"
-        "pop %r15; pop %r14; pop %r13; pop %r12; pop %r11; pop %r10; pop %r9; pop %r8; "
-        "pop %rbp; pop %rdi; pop %rsi; pop %rbx; pop %rdx; pop %rcx; pop %rax;"
+        "add %0, %%rsp;"
+        "pop %%r15; pop %%r14; pop %%r13; pop %%r12; pop %%r11; pop %%r10; pop %%r9; pop %%r8; "
+        "pop %%rbp; pop %%rdi; pop %%rsi; pop %%rbx; pop %%rdx; pop %%rcx; pop %%rax;"
+        WRAPPER_EXIT
+        :
+        : "i" (STACK_ALLOC_SIZE)
+        : "memory"
     );
-    __asm__ __volatile__("nop; ud2; ud2;");
-#endif
 }

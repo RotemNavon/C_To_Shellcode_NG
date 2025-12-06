@@ -165,7 +165,6 @@ class ShellcodeBuilder:
         
         loader_exe = self.compile_loader(loader_path, output_name)
         
-        os.remove(loader_path)
         print(f"[+] Loader executable ready at {loader_exe}")
 
 

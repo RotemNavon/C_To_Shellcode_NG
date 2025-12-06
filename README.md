@@ -23,7 +23,6 @@ python3 c-to-shellcode.py
 - **Flexible output** — produce raw binaries, C arrays, or ready-to-run loader executables.
 - **Cross-platform build** — compile on Linux, execute on Windows.
 - **Dynamic WinAPI resolution** — handles direct and forwarded exports at runtime.
-- **Vectored Exception Handler (VEH)** — automatic exception handling wrapper around user payload logic.
 - **Modular & extensible** — add source files, payload types, or utilities easily.
 
 ---
@@ -56,7 +55,7 @@ C_To_Shellcode_NG/
 - The script will:
   - Compile sources (MinGW-w64).
   - Link them into a raw shellcode blob (merges `.text`, `.func`, `.data`, `.bss`).
-  - Patch inline hook markers (optional, [see Inline Hook Patching](#️-inline-hook-patching-sandwich-method)).
+  - Patch inline hook markers (optional).
   - Convert the binary to a C byte array and embed in the loader template.
   - Compile the loader (`bin/<given_name>loader.exe`).
   - Clean up temp files.
@@ -91,43 +90,22 @@ Below is the memory layout of the final shellcode binary:
 +-------------------------------+
 |    Shellcode Functions (.func)|  ← All FUNC-marked functions
 +-------------------------------+
-|    Strings, Values, Globals   |  ← Constants, literals, GLOBAL_VAR variables
+|        Strings,Values         |  ← Constants, literals
 |        (.data + .bss)         |
 +-------------------------------+
 ```
 
 ---
 
-## 🗃️ Using Global Variables
+## ⚠️ Global Variables
 
-Globals are fully supported in shellcode.  
-There are two cases:
+Global variables are not supported in this shellcode framework.
 
-**1. Single-source-file global**  
-Declare as `GLOBAL_VAR` directly in the `.cpp` file:
+The reason is that all global variables get saved in the .data/.bss section which has to have the write permission in order for them to be updatable.
 
-```cpp
-// main.cpp
-GLOBAL_VAR int my_counter = 0;
-```
+That creates a scenario where the shellcode need RWX permissions which is a big red flag OPSEC wise.
 
-**2. Multi-source-files global**  
-Declare as `GLOBAL_VAR` in a shared header (`.h`):
-
-```cpp
-// wrapper.h
-GLOBAL_VAR DYNAMIC_FUNCTIONS g_functions = {};
-```
-
-Access from any file by including the header:
-
-```cpp
-// main.cpp
-#include "wrapper.h"
-// Use: g_functions.ShellExecuteA(...)
-```
-
-Always initialize globals before use. In flat binaries, uninitialized globals may contain garbage.
+The solution is to use stack based variables.
 
 ---
 
@@ -181,26 +159,26 @@ Inline hooking allows you to redirect execution from an existing binary to your 
 
 ```
 [Target Binary at offset X]
-    ↓ (12-byte absolute JMP)
+    ↓ (13-byte absolute JMP)
 [Allocated Memory with Shellcode]
-├─ Overwritten bytes (original 12 bytes from offset X)
+├─ Overwritten bytes (original 13 bytes from offset X)
 ├─ Your shellcode logic
-└─ JMP back to offset X+12 (resume normal execution)
+└─ JMP back to offset X+13 (resume normal execution)
 ```
 
-**Why 12 bytes?**  
+**Why 13 bytes?**  
 ```
-movabs rax, <x64 address> : 0x48, 0xB8, ??, ??, ??, ??, ??, ??, ??, ??  -> 10 bytes  
-jmp rax                   : 0xff, 0xe0                                  -> 2 bytes
+mov r11, <x64 address> : 0x49, 0xbb, ??, ??, ??, ??, ??, ??, ??, ??  -> 10 bytes  
+jmp r11                : 0x41, 0xff, 0xe3                            -> 3 bytes
 ```
 
 ### How It Works
 
 1. **Allocate memory** for your shellcode in the target process
-2. **Copy the first 12 bytes** from offset X into your shellcode (to preserve original instructions)
+2. **Copy the first 13 bytes** from offset X into your shellcode (to preserve original instructions)
 3. **Write your shellcode logic** in the middle
-4. **Add a JMP back** to offset X+12 to resume normal program flow
-5. **Overwrite offset X** in the target binary with a 12-byte absolute jump to your allocated shellcode
+4. **Add a JMP back** to offset X+13 to resume normal program flow
+5. **Overwrite offset X** in the target binary with a 13-byte absolute jump to your allocated shellcode
 
 This creates a "sandwich" where execution flows: Original Code → Your Shellcode → Back to Original Code
 
@@ -212,11 +190,7 @@ Use the `--inline` flag when building:
 python3 c-to-shellcode.py --inline
 ```
 
-This enables the `INLINE_HOOK_MODE` define, which:
-
-- Adds register preservation (push/pop all registers)
-- Allocates shadow space (`sub $0x32, %rsp`)
-- Adds a NOP and 2 UD2 bytes at the end as a marker for automatic patching
+This enables the `INLINE_HOOK_MODE` define, which adds a NOP and 2 UD2 bytes at the end as a marker for automatic patching
 
 The build script's `patch_inline_hook` function automatically:
 - Locates the NOP + 2xUD2 marker (`0x90 0x0f 0x0b 0x0f 0x0b`) at the shellcode end
@@ -227,9 +201,8 @@ The build script's `patch_inline_hook` function automatically:
 
 When using `--inline` mode:
 
-- The entry function (`StartWrapper`) should preserve all registers and allocate shadow space
-- At the shellcode start, include the 12 overwritten bytes from the target binary
-- At the end, add your own absolute jump back to offset X+12 in the target binary
+- At the shellcode start, include the 13 overwritten bytes from the target binary
+- At the end, add your own absolute jump back to offset X+13 in the target binary
 - The automatic patching handles the exit jump placeholder
 
 ---

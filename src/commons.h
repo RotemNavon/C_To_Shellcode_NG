@@ -4,18 +4,11 @@
 #include <stdio.h>
 
 #define FUNC __attribute__((section(".func")))
-#define NAKED __attribute__((naked))
-#define NO_OPTIMIZE __attribute__((optimize("O0")))
-#define GLOBAL_VAR inline
 
 // ---- X-Macro Arsenal ----
 #define WIN32_FUNC_ARSENAL \
     X(LoadLibraryA,                     "kernel32.dll") \
-    X(AddVectoredExceptionHandler,      "kernel32.dll") \
-    X(RemoveVectoredExceptionHandler,   "kernel32.dll") \
-    X(ShellExecuteA,                    "shell32.dll")  \
-    X(MessageBoxA,                      "user32.dll")   \
-    X(sprintf,                          "msvcrt.dll")
+    X(ShellExecuteA,                    "shell32.dll")
 
 // ---- Generate function pointer struct, using decltype
 struct DYNAMIC_FUNCTIONS
@@ -24,6 +17,3 @@ struct DYNAMIC_FUNCTIONS
     WIN32_FUNC_ARSENAL
 #undef X
 };
-
-// Global functions structure instance - defined here to avoid extern linkage issues
-GLOBAL_VAR DYNAMIC_FUNCTIONS g_functions = {};
