@@ -118,6 +118,14 @@ class ShellcodeBuilder:
         
         return "unsigned char payload[] = {\n    " + "\n    ".join(lines) + "\n};\n"
     
+    def write_c_array_to_file(self, shellcode_array: str, output_name: str, output_dir: Path) -> Path:
+        """Writes the C array to a .cpp file inside the output directory."""
+        c_array_path = output_dir / f"{output_name}.cpp"
+        with open(c_array_path, "w") as f:
+            f.write(shellcode_array)
+        print(f"[+] Written C array to {c_array_path}")
+        return c_array_path
+
     def generate_loader(self, shellcode_array: str, output_name: str, output_dir: Path) -> Path:
         """Generates loader C++ file from template with embedded shellcode inside the output directory."""
         print("[+] Generating loader with embedded shellcode")
@@ -149,7 +157,6 @@ class ShellcodeBuilder:
         output_dir.mkdir(parents=True, exist_ok=True)
 
         object_files = self.compile_sources()
-
         payload_path = self.link_payload(object_files, output_name, output_dir)
         self.cleanup_object_files(object_files)
 
@@ -165,11 +172,16 @@ class ShellcodeBuilder:
             f.write(payload_bytes)
 
         shellcode_array = self.convert_to_c_array(payload_bytes)
-        loader_path = self.generate_loader(shellcode_array, output_name, output_dir)
 
-        loader_exe = self.compile_loader(loader_path, output_name, output_dir)
-
-        print(f"[+] Loader executable ready at {loader_exe}")
+        if self.inline_hook_mode:
+            # Only output .bin and .cpp (C array)
+            self.write_c_array_to_file(shellcode_array, output_name, output_dir)
+            print(f"[+] Inline mode: outputs are {output_name}.bin and {output_name}.cpp")
+        else:
+            # Standard mode: output .bin, .cpp (loader), and .exe
+            loader_path = self.generate_loader(shellcode_array, output_name, output_dir)
+            loader_exe = self.compile_loader(loader_path, output_name, output_dir)
+            print(f"[+] Loader executable ready at {loader_exe}")
 
 
 if __name__ == "__main__":
